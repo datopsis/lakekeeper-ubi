@@ -139,6 +139,8 @@ jobs:
 
       - name: Confirm the locked binary suits the locked base image
         env:
+          CONTAINER_RUNTIME: docker
+          IMAGE: ${{ env.TEST_IMAGE }}
           ARCHITECTURE: ${{ matrix.architecture }}
         run: bash tests/check-runtime-requirements.sh
 
