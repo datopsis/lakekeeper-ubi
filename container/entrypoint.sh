@@ -22,6 +22,16 @@ readonly EXIT_CONFIGURATION=78
 readonly TOGGLE_NAME="LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY"
 readonly KEY_NAME="LAKEKEEPER__PG_ENCRYPTION_KEY"
 
+# The value upstream falls back to when the variable is unset. Setting it
+# explicitly is exactly as unsafe as leaving it unset, and upstream does not
+# warn in that case: the warning fires only on an absent variable. Someone who
+# copies a chart default or an example therefore gets no signal at all.
+#
+# This is version-specific. Re-check it when the locked upstream version
+# changes; a silently renamed default would make this check pass for the wrong
+# reason.
+readonly UPSTREAM_DEFAULT_KEY="This is unsafe, please set a proper key"
+
 fail() {
     printf 'lakekeeper-ubi: %s\n' "$1" >&2
     shift
@@ -86,6 +96,18 @@ if test "${require_key}" = "yes" && test "${needs_key}" = "yes"; then
         fail "${KEY_NAME} is unset or empty." \
             "Lakekeeper would otherwise start and encrypt stored storage" \
             "credentials with a publicly known default key." \
+            "Set ${KEY_NAME} to a unique secret value." \
+            "To accept upstream behavior instead, set ${TOGGLE_NAME}=false." \
+            "See https://github.com/datopsis/lakekeeper-ubi#secret-encryption-key"
+    fi
+
+    # Set to the published default, the key is public knowledge, so the value
+    # is compared rather than only its presence. The comparison names no
+    # secret: the value it matches is already in upstream's documentation.
+    if test "${LAKEKEEPER__PG_ENCRYPTION_KEY}" = "${UPSTREAM_DEFAULT_KEY}"; then
+        fail "${KEY_NAME} is set to the publicly known upstream default." \
+            "That is exactly as unsafe as leaving it unset, and upstream does" \
+            "not warn about it." \
             "Set ${KEY_NAME} to a unique secret value." \
             "To accept upstream behavior instead, set ${TOGGLE_NAME}=false." \
             "See https://github.com/datopsis/lakekeeper-ubi#secret-encryption-key"

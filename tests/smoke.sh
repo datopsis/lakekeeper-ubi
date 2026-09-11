@@ -15,6 +15,7 @@ default_key="${prefix}-default-key"
 missing_key="${prefix}-missing-key"
 invalid_toggle="${prefix}-invalid-toggle"
 blank_key="${prefix}-blank-key"
+default_value_key="${prefix}-default-value-key"
 unmigrated="${prefix}-unmigrated"
 unreachable="${prefix}-unreachable"
 
@@ -39,7 +40,8 @@ database_url="postgres://lakekeeper:${postgres_password}@${database}:5432/lakeke
 cleanup() {
     "${runtime}" rm --force \
         "${primary}" "${arbitrary}" "${default_key}" "${missing_key}" \
-        "${invalid_toggle}" "${blank_key}" "${unmigrated}" "${unreachable}" \
+        "${invalid_toggle}" "${blank_key}" "${default_value_key}" \
+        "${unmigrated}" "${unreachable}" \
         "${database}" \
         >/dev/null 2>&1 || true
     "${runtime}" network rm --force "${network}" >/dev/null 2>&1 || true
@@ -296,6 +298,21 @@ fi
     --env "LAKEKEEPER__PG_ENCRYPTION_KEY=   " \
     "${image}" serve >/dev/null
 wait_for_exit "${blank_key}" 78
+
+# Setting the key to upstream's published default is as unsafe as leaving it
+# unset, and upstream does not warn in that case: its warning fires only on an
+# absent variable. A chart default or a copied example lands exactly here.
+"${runtime}" run --detach --name "${default_value_key}" \
+    --network "${network}" \
+    "${readonly_runtime_args[@]}" \
+    --cap-drop ALL \
+    --security-opt "${no_new_privileges}" \
+    --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
+    --env "LAKEKEEPER__PG_ENCRYPTION_KEY=This is unsafe, please set a proper key" \
+    "${image}" serve >/dev/null
+wait_for_exit "${default_value_key}" 78
+grep -Fq 'publicly known upstream default' <<< \
+    "$("${runtime}" logs "${default_value_key}" 2>&1)"
 
 # An unreadable toggle fails closed rather than being ignored.
 "${runtime}" run --detach --name "${invalid_toggle}" \

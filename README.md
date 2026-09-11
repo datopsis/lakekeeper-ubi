@@ -32,15 +32,15 @@ The first release is being designed for:
 
 - serving the Apache Iceberg REST catalog API to query engines;
 - managing warehouse, namespace, and table metadata in PostgreSQL;
+- storing table data in S3-compatible object storage;
 - running schema migrations as a separate, auditable step;
 - exposing health and metrics endpoints for operations; and
 - operating inside controlled networks with inspectable evidence.
 
-Warehouse storage profiles, OIDC authentication, OpenFGA authorization, Kafka
-and NATS event publishing, and the Vault secrets backend are **not** in the
-first-release boundary. They may be evaluated later without expanding the
-default image's trusted computing base. See
-[the roadmap](docs/ROADMAP.md#deferred-from-the-first-release).
+S3-compatible warehouse storage is in the first-release boundary and is being
+qualified against SeaweedFS. OIDC authentication, OpenFGA authorization, Kafka
+and NATS event publishing, ADLS, OneLake, GCS, and the Vault secrets backend
+are **not**. See [the roadmap](docs/ROADMAP.md#deferred-from-the-first-release).
 
 ## Security design
 
@@ -105,7 +105,8 @@ credential it holds is decryptable by anyone who reads public source code.
 
 **This image fails closed by default instead.** When
 `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY` is `true`, which is the default, a
-missing or whitespace-only key stops the container before Lakekeeper starts,
+missing key, a whitespace-only key, or a key set to upstream's published
+default stops the container before Lakekeeper starts,
 with exit status `78` (`EX_CONFIG`) and a diagnostic naming the variable to
 set. The key value itself is never printed or logged.
 
@@ -122,10 +123,16 @@ quietly disable the control. Informational subcommands such as `version` and
 `healthcheck` keep working without a key, so a refused container stays
 diagnosable.
 
-Two limits worth stating plainly: the guard checks that a key is **present**,
-not that it is strong or secret; and it cannot help a catalog that already ran
-without one, because credentials stored during that period were encrypted with
-the default key and adding a key later does not re-encrypt them.
+The default value matters more than it sounds. Upstream warns only when the
+variable is *absent*, so setting it to the published default, which is what a
+copied example or a chart default produces, generates no warning at all. This
+image rejects that value for the same reason it rejects an empty one.
+
+Two limits worth stating plainly: the guard checks presence and rejects one
+known-bad value, but does not judge whether a key is strong or secret; and it
+cannot help a catalog that already ran without one, because credentials stored
+during that period were encrypted with the default key and adding a key later
+does not re-encrypt them.
 
 Full details, including the exact command allowlist and the rotation caveat,
 are in [configuration](docs/CONFIGURATION.md).

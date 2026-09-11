@@ -129,13 +129,104 @@ example value from this repository or any other.
 
 ### Changing the key later
 
-Rotating this key is not a configuration change alone: existing rows were
-encrypted with the previous key. Treat rotation as a planned data operation,
-and verify against a restored backup before doing it in production. Key
-rotation procedure is a first-release roadmap item and is not yet documented
-here; do not infer that it is a simple restart.
+**Rotation is a data operation, not a restart.** Storage credentials already in
+the database were encrypted with the previous key. Changing the variable and
+restarting gives a server that cannot decrypt its own stored secrets, which
+surfaces as warehouse operations failing rather than as a startup error.
+
+Upstream does not currently document a rotation command, and this project has
+not tested a rotation procedure, so no supported procedure is published here.
+What is known:
+
+- Do not rotate by editing the variable and restarting.
+- The safe general shape is to re-register the affected warehouses with their
+  credentials under the new key, so the secrets are re-encrypted through normal
+  API operations rather than by rewriting rows.
+- Rehearse any rotation against a restored backup first, and verify that every
+  warehouse still vends credentials afterwards.
+- A catalog that ever ran without a key, or with the published default, should
+  be treated as having exposed every credential stored during that period.
+  Rotating the key does not undo that: those credentials must be revoked and
+  reissued at the storage provider.
+
+Publishing and testing a supported rotation procedure is a roadmap item. Until
+it exists, do not infer one from this section.
+
+## Configuration values that fail open
+
+The encryption key was the first setting found whose absence degrades security
+instead of stopping the service. It was not the only one. This is the inventory
+of every such value in the upstream configuration surface, with who is
+responsible for each.
+
+A value is listed here when leaving it unset produces a **working but less
+secure** deployment. Settings that simply fail when missing are not a hazard,
+because the operator finds out immediately.
+
+Classification:
+
+- **Image-enforced**: this image refuses to start, or otherwise prevents the
+  unsafe state.
+- **Deployment-enforced**: the operator must set it. The image cannot decide,
+  usually because any default would be wrong for some legitimate deployment.
+- **Accepted**: the unsafe-ish default is reasonable and the risk is recorded.
+
+| Setting | Default | What the default costs | Class |
+| --- | --- | --- | --- |
+| `LAKEKEEPER__PG_ENCRYPTION_KEY` | A published literal string | Stored storage credentials encrypted with a public key | **Image-enforced** |
+| `LAKEKEEPER__AUTHZ_BACKEND` | `allowall` | Every authenticated caller can do everything | Deployment-enforced |
+| `LAKEKEEPER__OPENID_PROVIDER_URI` | unset | No authentication at all | Deployment-enforced |
+| `LAKEKEEPER__OPENID_AUDIENCE` | unset | Tokens are accepted without checking `aud`, so a token minted for a different application of the same issuer is valid here | Deployment-enforced |
+| `LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS` | unset | Safe default; adding issuers widens who can mint valid tokens | Accepted |
+| `LAKEKEEPER__PG_SSL_MODE` | unset | The database connection is plaintext, and nothing says so | Deployment-enforced |
+| `LAKEKEEPER__PG_SSL_ROOT_CERT` | unset | With TLS enabled but no root certificate, the server certificate is not verified against a known CA | Deployment-enforced |
+| `LAKEKEEPER__USE_X_FORWARDED_HEADERS` | `true` | Proxy headers are trusted from any caller, so a directly reachable catalog accepts spoofed client addresses and protocols | Deployment-enforced |
+| `LAKEKEEPER__BIND_IP` | `0.0.0.0` | The API and the metrics port listen on every interface | Deployment-enforced |
+| `LAKEKEEPER__INSTANCE_ADMINS` | empty | Safe default; the first bootstrap caller becomes administrator instead | Accepted |
+| Bootstrap state | open until bootstrapped | Whoever reaches the endpoint first becomes the initial administrator | Deployment-enforced |
+| `LAKEKEEPER__ROLE_PROVIDER__<id>__REQUIRE_CONNECTED_ON_STARTUP` | `false` | The server starts even when a role provider is unreachable, and authorizes from cached roles | Deployment-enforced |
+| `LAKEKEEPER__ENABLE_AWS_SYSTEM_CREDENTIALS` | `false` | Safe default. Enabling lets a warehouse borrow the server's own cloud identity | Accepted |
+| `LAKEKEEPER__ENABLE_AZURE_SYSTEM_CREDENTIALS` | `false` | Safe default, as above | Accepted |
+| `LAKEKEEPER__ENABLE_GCP_SYSTEM_CREDENTIALS` | `false` | Safe default, as above | Accepted |
+| `LAKEKEEPER__S3_REQUIRE_EXTERNAL_ID_FOR_SYSTEM_CREDENTIALS` | `true` | Safe default. Disabling removes a cross-account confused-deputy protection | Accepted |
+| `LAKEKEEPER__PG_ENABLE_STATEMENT_LOGGING` | `false` | Safe default. Enabling can place query content in logs | Accepted |
+| `LAKEKEEPER__ALLOW_ORIGIN` | unset | Safe default: no cross-origin access is granted | Accepted |
+| `LAKEKEEPER__MAX_REQUEST_BODY_SIZE` | 2 MiB | A bounded default already exists | Accepted |
+| `LAKEKEEPER__MAX_REQUEST_TIME` | 30s | A bounded default already exists | Accepted |
+
+### The two that most often go unnoticed
+
+**An explicitly set default key is silent.** Upstream warns when
+`LAKEKEEPER__PG_ENCRYPTION_KEY` is *unset*. It does not warn when the variable
+is set to the published default value, which is what a copied example or a
+chart default produces. That path was measured against the locked version and
+produces no warning of any kind. This image rejects that exact value for the
+same reason it rejects an absent one.
+
+**A plaintext database connection is silent.** With `LAKEKEEPER__PG_SSL_MODE`
+unset, the catalog connects to PostgreSQL without TLS and logs nothing about
+it. Everything between the catalog and its database, including the encrypted
+secret blobs and every query, crosses the network in the clear. Measured: no
+warning is emitted. The image cannot fix this, because a local socket or an
+already-encrypted network path is a legitimate deployment, but an operator
+should never discover it from a packet capture.
+
+### Why the image enforces only one of these
+
+The encryption key is enforced because there is no legitimate deployment that
+wants the published default: every use of it is a mistake. The others all have
+deployments where the default is correct. A catalog on a trusted network with
+no identity provider is a real evaluation scenario; a catalog behind a proxy
+that sets the forwarded headers genuinely should trust them; a database reached
+over a local socket does not need TLS.
+
+An image that refuses to start on any of those would be wrong more often than
+it was right, and operators would disable the checks wholesale, which is worse
+than not having them. Enforcement is reserved for the case where every
+occurrence is an error.
 
 ## What the guard does not do
+
 
 Be precise about the boundary:
 

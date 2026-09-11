@@ -39,18 +39,22 @@ corresponding gates.
 | Core uses | Iceberg REST catalog API, management API, health and metrics endpoints, and database migration, all against an operator-managed PostgreSQL instance. |
 | Authorization | `allow-all` only, with the boundary stated explicitly. OpenFGA is out of scope. |
 | Authentication | Out of scope for a qualified profile; OIDC is documented as preview at most. |
-| Warehouse storage | Out of scope for a qualified profile. |
+| Warehouse storage | S3-compatible storage is in scope and must be qualified, tested against SeaweedFS. A catalog with no warehouse cannot hold a table, so excluding storage would leave nothing to release. ADLS, OneLake, and GCS stay out of scope. |
 | TLS | Terminated outside the image. Lakekeeper does not terminate TLS, so a deployment needs a reverse proxy or ingress in front of it. |
 | Controlled networks | Document connected build, artifact transfer, digest verification, mirrored deployment, local trust, logging, and update procedures. |
 | FIPS | Make no FIPS validation claim without a separately defined and evidenced cryptographic boundary. |
 | STIG/SCAP | Publish exact tailored image-filesystem results; make no STIG certification claim. |
 | Registry | Publish the first release to GHCR. |
 
-Warehouse storage profiles, authentication, authorization, and event publishing
-are deferred as described under "Deferred from the first release". They must not
-delay the core first release, and the first release must state plainly that a
-catalog deployed without authentication and authorization is only appropriate
-on a trusted network.
+Authentication, authorization, and event publishing are deferred as described
+under "Deferred from the first release". The first release must state plainly
+that a catalog deployed without authentication and authorization is only
+appropriate on a trusted network.
+
+Warehouse storage is **not** deferred. An earlier version of this boundary
+excluded it, which would have produced a catalog that starts, reports healthy,
+and cannot hold a single table. Storage is what makes the Iceberg REST catalog
+API a usable thing rather than an endpoint that answers.
 
 ## Immediate first-release sequence
 
@@ -76,25 +80,43 @@ Work proceeds in this dependency order:
 
 ## Package 1: secret and configuration failure modes
 
-The encryption-key decision is made and implemented: the image fails closed by
-default, with a documented opt-out. See `docs/CONFIGURATION.md`. The items
-below are what remains.
+The encryption-key contract is implemented and the configuration surface has
+been inventoried. The image fails closed when the key is absent **or set to
+upstream's published default**, with a documented opt-out; the full inventory
+of settings that degrade silently is in `docs/CONFIGURATION.md`.
 
-- [ ] Inventory every other configuration value whose absence degrades security
-  rather than failing, and classify each one as image-enforced,
-  deployment-enforced, or accepted with rationale. The encryption key was the
-  first such value found, not necessarily the only one.
-- [ ] Decide whether the guard should also reject a key that matches the known
-  upstream default value, and whether to require a minimum length or entropy.
-  It currently checks presence only, which is deliberate but weak.
-- [ ] Document the encryption-key rotation procedure. Rotation is a data
-  operation, not a restart, because existing rows were encrypted with the
-  previous key. Until this is written and tested, `docs/CONFIGURATION.md` must
-  keep telling operators not to assume otherwise.
-- [ ] Verify that the encryption key, database password, and object-store
-  credentials never appear in logs, error responses, the management API, or
-  image layers. The smoke suite covers container logs; the other surfaces are
-  not yet covered.
+Three things were measured against the locked version and are worth keeping in
+view:
+
+- **Setting the key to upstream's published default is silent.** Upstream warns
+  only when the variable is absent, so a copied example or a chart default
+  produces no signal at all. This image now rejects that exact value.
+- **A plaintext database connection is silent.** With `LAKEKEEPER__PG_SSL_MODE`
+  unset the catalog connects without TLS and logs nothing, so every query and
+  every encrypted secret blob crosses the network in the clear.
+- **Audit tracing is enabled by default in practice**, while the upstream
+  configuration reference records the default as `false`. The documentation and
+  the behavior disagree.
+
+- [ ] Decide whether to require a minimum length or entropy for the encryption
+  key. Rejecting the published default was unambiguous because every use of it
+  is a mistake; rejecting a short key is a policy choice that could refuse a
+  legitimate deployment, so it needs a decision rather than an implementation.
+- [ ] Re-check the published default key value at every upstream version bump.
+  The guard compares against a literal recorded in the entrypoint, and a
+  silently renamed default would make the check pass for the wrong reason.
+- [ ] Publish and test a supported encryption-key rotation procedure. The
+  configuration guide currently states what is known and explicitly refuses to
+  imply a procedure that has not been tested.
+- [ ] Report the audit-tracing default discrepancy upstream, and decide which
+  behavior this image documents in the meantime.
+- [ ] Decide whether this image should default `LAKEKEEPER__USE_X_FORWARDED_HEADERS`
+  to `false`. Upstream defaults it to `true`, which trusts proxy headers from
+  any caller; that is correct behind a proxy and wrong when the catalog is
+  directly reachable. Changing an upstream default needs the same justification
+  the encryption-key guard received.
+- [ ] Verify that secrets never appear in error responses, the management API,
+  or image layers. The smoke suite currently covers container logs only.
 - [ ] Investigate the observation that `wait-for-db` exited `0` against an
   unresolvable database host. If confirmed, document that it must not be used
   as a readiness gate and report it upstream.
@@ -211,6 +233,41 @@ Two questions were settled by measurement rather than left open:
   and the crate manifest together, so they cannot drift apart.
 
 ## Package 3: supported configuration and runtime qualification
+
+### Warehouse storage
+
+The catalog is only useful with somewhere to put tables, and this is also the
+first work that exercises the encryption key against a real stored credential.
+Until a warehouse has been registered, nothing has ever been encrypted with it.
+
+- [ ] Add an S3-compatible storage fixture to the test harness, using a
+  digest-pinned upstream SeaweedFS image. The fixture is a test dependency, not
+  a shipped component: Lakekeeper connects to whatever S3-compatible endpoint
+  an operator runs.
+- [ ] Prove the catalog works end to end: register a warehouse, create a
+  namespace and a table through the Iceberg REST API, write and read data, and
+  drop it. The smoke suite currently proves the server starts and answers, not
+  that the catalog functions.
+- [ ] Prove the encryption key protects something real: register a warehouse
+  with storage credentials, confirm the stored secret is not readable as
+  plaintext in PostgreSQL, and confirm the credential still works after a
+  restart, which requires a successful decrypt.
+- [ ] Determine which credential model SeaweedFS supports. STS is AWS-specific,
+  so vending short-lived credentials may be unavailable and remote signing or
+  access keys may be the only options. Qualify what actually works rather than
+  what the Iceberg specification allows.
+- [ ] Set the `s3-compat` flavor and record which S3 behaviors differ from AWS,
+  including path versus virtual-host addressing and any unsupported operations.
+- [ ] Test per-warehouse credential isolation: two warehouses with distinct
+  prefixes and distinct credentials, and prove that one cannot read the other's
+  prefix. Upstream states this as a requirement, which makes it a cross-tenant
+  boundary rather than a tidiness rule.
+- [ ] Exercise outbound TLS against the storage endpoint using the image's own
+  trust bundle, which closes the gap that the bundle is currently validated
+  statically by size and certificate count.
+- [ ] Decide whether the Datopsis SeaweedFS image replaces the upstream test
+  fixture, and when. Nothing here blocks on it: the switch belongs with the
+  same change that replaces the upstream PostgreSQL image in `compose.yaml`.
 
 - [ ] Qualify the minimum catalog profile: migration, server startup, health,
   management info, Iceberg REST endpoints, and graceful shutdown against a
@@ -486,25 +543,6 @@ These are deliberately outside the first-release boundary. Each needs its own
 threat boundary, test matrix, and maintenance commitment before it can be
 claimed. The list is drawn from the upstream feature surface, so it also serves
 as the record of what this image does *not* yet support.
-
-### Warehouse storage
-
-- [ ] **S3 and S3-compatible storage.** Qualify first, with an S3-compatible
-  implementation such as MinIO using the `s3-compat` flavor. Cover access-key
-  credentials, STS temporary credentials, and AWS system identities.
-- [ ] **Credential vending versus remote signing.** These are two different trust
-  models: vending hands the client temporary credentials, while remote signing
-  keeps the credentials server-side and signs client-prepared requests. They are
-  selectable per warehouse and per request through the
-  `X-Iceberg-Access-Delegation` header. Document which one a deployment should
-  prefer and why; do not present them as interchangeable.
-- [ ] **Warehouse isolation.** Upstream requires that every warehouse use a
-  distinct storage location or prefix and distinct credentials scoped to only
-  that prefix. Test the failure mode where two warehouses share credentials,
-  because that is a cross-tenant data-access boundary, not a tidiness rule.
-- [ ] **ADLS Gen 2, OneLake, and GCS**, including client credentials, Azure and
-  GCP system identities, and the required role assignments. Evaluate only when an
-  environment exists to test each one.
 
 ### Authentication and authorization
 

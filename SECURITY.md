@@ -43,13 +43,17 @@ when the image itself is current.
 
 - **The secret encryption key has an insecure upstream default.** If
   `LAKEKEEPER__PG_ENCRYPTION_KEY` is unset, upstream Lakekeeper starts anyway,
-  logs a warning, and encrypts stored storage credentials with a publicly
-  known default key. **This image fails closed on that condition by default**
-  and refuses to start, which can be turned off with
-  `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY=false`. The guard checks presence, not
-  strength, and cannot undo exposure: treat a catalog that ever ran without a
-  key as having exposed every credential stored during that period, because
-  adding a key later does not re-encrypt existing rows. See
+  logs a warning, and encrypts stored storage credentials with a publicly known
+  default key. Setting the variable *to* that published default is equally
+  unsafe and upstream does not warn about it at all, which is the state a copied
+  example or a chart default produces. **This image refuses to start in either
+  case**, which can be turned off with
+  `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY=false`. The guard checks presence and
+  rejects that one known value; it does not judge whether a key is strong, and
+  it cannot undo exposure. Treat a catalog that ever ran without a key, or with
+  the default, as having exposed every credential stored during that period:
+  adding a key later does not re-encrypt existing rows, and those credentials
+  must be revoked and reissued at the storage provider. See
   [configuration](docs/CONFIGURATION.md).
 - **The default authorization backend is `allow-all`.** A catalog deployed
   without authentication and authorization must not be reachable from an

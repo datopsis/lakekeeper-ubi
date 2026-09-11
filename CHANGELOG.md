@@ -109,7 +109,20 @@ but container releases use the upstream-derived format documented in
 - Added roadmap sections for cybersecurity control documentation and for the
   tailored SCAP scan profile.
 
+- Inventoried every upstream configuration value whose absence degrades
+  security rather than failing, classified each as image-enforced,
+  deployment-enforced, or accepted, and recorded why the image enforces only
+  the encryption key: it is the one case where every occurrence of the default
+  is a mistake.
+- Documented what is known about encryption-key rotation, including that it is
+  a data operation rather than a restart, and explicitly declined to publish a
+  procedure that has not been tested.
+- Brought S3-compatible warehouse storage into the first-release boundary, to
+  be qualified against SeaweedFS. Excluding it would have produced a catalog
+  that starts, reports healthy, and cannot hold a single table.
+
 ### Security
+
 
 
 
@@ -132,6 +145,16 @@ but container releases use the upstream-derived format documented in
   operator who overrides the entrypoint bypasses it.
 - Recorded the `allow-all` default authorization backend and the pre-bootstrap
   window as deployment-critical operator responsibilities.
+- Made the image also refuse to start when `LAKEKEEPER__PG_ENCRYPTION_KEY` is
+  set to upstream's published default value. Upstream warns only when the
+  variable is absent, so a copied example or a chart default reaches the same
+  unsafe state with no signal at all. Measured against the locked version.
+- Recorded that a plaintext PostgreSQL connection is silent: with
+  `LAKEKEEPER__PG_SSL_MODE` unset the catalog connects without TLS and logs
+  nothing, so every query and every encrypted secret blob crosses the network
+  in the clear.
+- Recorded that audit tracing is enabled by default in practice while the
+  upstream configuration reference records the default as `false`.
 - Removed `openssl-libs` from the image, and with it the only High vulnerability
   finding, an unfixed OpenSSL QUIC server flaw. The binary links no TLS library,
   so OpenSSL was present only because an empty installroot resolved a full base
