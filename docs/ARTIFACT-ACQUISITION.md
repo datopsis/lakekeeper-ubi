@@ -35,6 +35,15 @@ The binary links no TLS library; upstream builds against a Rust TLS stack.
 `ca-certificates` is installed for trust material used by object-store and
 identity-provider connections, not to satisfy a dynamic link.
 
+Stock UBI 9 Micro already provides every shared library in that table. The
+builder currently installs `glibc` and `libgcc` into the runtime root anyway,
+because `--installroot` targets an empty root and therefore resolves a complete
+base system. That is redundant work whose only effect is a larger overlay and a
+longer package inventory. The genuine delta between the final stage and what the
+image needs is `ca-certificates` and `tzdata`, plus the trust chain the former
+requires, which is what a future RPM lock has to cover. Removing the redundancy
+is tracked in the roadmap.
+
 ## Trust limitation
 
 **Upstream publishes no detached signature and no checksum file for these
