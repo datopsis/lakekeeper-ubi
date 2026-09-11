@@ -124,8 +124,21 @@ observed directly against the locked version.
   weighing image size against incident-analysis value, and record the decision
   with its effect on the recorded binary digest.
 - [ ] Record source, redistribution, licensing, support lifecycle, and update
-  ownership for every runtime component, including the Rust dependency
-  inventory reported by the SBOM.
+  ownership for every runtime component.
+- [ ] Close the SBOM coverage gap. The current Syft inventory resolves 40 UBI
+  RPMs and the base image, and **no Lakekeeper crate dependencies**: the
+  upstream release binary carries no embedded dependency metadata that a
+  scanner can read. A release SBOM that omits the application's own dependency
+  tree cannot support vulnerability triage for Lakekeeper itself. Evaluate
+  requesting an upstream SBOM, an upstream `cargo auditable` build, or
+  generating the inventory from the upstream lockfile at the locked release
+  tag, and state the residual gap if none is achievable.
+- [ ] Evaluate removing `openssl-libs` from the runtime. The binary links no
+  TLS library, so OpenSSL is present only as a transitive dependency of the
+  trust-material packages. It currently contributes the image's only High
+  finding (CVE-2026-14456, a QUIC server flaw Red Hat has not fixed) against
+  code this image never executes. Record why the package is present, whether
+  it can be dropped, and the triage rationale either way.
 
 ## Package 3: supported configuration and runtime qualification
 
