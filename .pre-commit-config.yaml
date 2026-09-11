@@ -14,6 +14,9 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: check-symlinks
+      # A script with a shebang that is not executable fails only when something
+      # tries to run it, which is usually CI rather than the author's machine.
+      - id: check-shebang-scripts-are-executable
       - id: check-yaml
       - id: destroyed-symlinks
       - id: detect-private-key
