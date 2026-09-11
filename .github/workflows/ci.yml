@@ -86,6 +86,56 @@ jobs:
       - name: Require the admission gate to reject tampered bundles
         run: bash tests/acquisition.sh
 
+      # The shipped binary carries no embedded dependency metadata, so without
+      # this the release can say nothing about Lakekeeper's own dependencies.
+      # This is the declared graph from the pinned release commit, not a bill of
+      # materials derived from the artifact. See docs/ARTIFACT-ACQUISITION.md.
+      - name: Stage the verified dependency manifest
+        run: |
+          mkdir -p crate-inventory
+          cp .artifact-bundle/amd64/Cargo.lock crate-inventory/Cargo.lock
+
+      - name: Generate the crate inventory with Syft
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: crate-inventory
+          format: spdx-json
+          output-file: lakekeeper-crates.spdx.json
+          syft-version: v1.51.1
+          upload-artifact: false
+          upload-release-assets: false
+
+      # Report-only. These are upstream's dependencies: this project cannot fix
+      # them, and blocking on them would tie every release to upstream's
+      # schedule. The triage policy is a roadmap item; visibility comes first.
+      - name: Record crate vulnerability findings
+        continue-on-error: true
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          sbom: lakekeeper-crates.spdx.json
+          output-format: json
+          output-file: grype-crates.json
+          severity-cutoff: negligible
+          only-fixed: false
+          fail-build: false
+          cache-db: true
+          grype-version: v0.118.0
+
+      - name: Summarize the crate inventory
+        if: ${{ always() }}
+        run: python .github/scripts/summarize_crate_inventory.py
+
+      - name: Retain the crate inventory
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crate-inventory-${{ github.sha }}
+          path: |
+            lakekeeper-crates.spdx.json
+            grype-crates.json
+          if-no-files-found: warn
+          retention-days: 14
+
   image:
     name: image (${{ matrix.architecture }})
     strategy:
@@ -161,6 +211,13 @@ jobs:
           IMAGE: ${{ env.TEST_IMAGE }}
           ARCHITECTURE: ${{ matrix.architecture }}
         run: bash tests/check-runtime-requirements.sh
+
+      - name: Confirm the image satisfies the binary at runtime
+        env:
+          CONTAINER_RUNTIME: docker
+          IMAGE: ${{ env.TEST_IMAGE }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: bash tests/runtime-dependencies.sh
 
       - name: Run restricted-runtime smoke tests
         env:

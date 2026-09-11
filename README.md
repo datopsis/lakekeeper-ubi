@@ -174,6 +174,8 @@ assuming it holds for a future upstream release.
   trust limitation.
 - [Configuration](docs/CONFIGURATION.md) documents the variables this image
   adds, the fail-closed encryption-key guard, and what that guard does not do.
+- [Hermetic build](docs/HERMETIC-BUILD.md) describes the network-free assembly
+  property, its security value, and the controls it does and does not support.
 - [FIPS analysis](docs/FIPS.md) records why this image cannot support a FIPS
   claim today, including why running on a FIPS-enabled host does not confer
   one.
@@ -251,6 +253,14 @@ To see the admission gate reject tampered inputs:
 
 ```console
 bash tests/acquisition.sh
+```
+
+To confirm the assembled image can actually satisfy the binary, including the
+name-resolution modules glibc loads with `dlopen` and the TLS trust bundle:
+
+```console
+CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
+  bash tests/runtime-dependencies.sh
 ```
 
 The smoke suite starts its own PostgreSQL fixture, generates credentials per

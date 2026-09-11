@@ -90,7 +90,27 @@ but container releases use the upstream-derived format documented in
   and a container minimization analysis measuring where the image's size
   actually is and what each possible reduction would cost.
 
+- Added a crate inventory. Upstream's `Cargo.lock` is acquired from the pinned
+  release commit, digest-verified on the same terms as every other input,
+  catalogued with Syft, and scanned with Grype report-only, with the counts
+  written to the CI job summary. The shipped binary carries no embedded
+  dependency metadata, so this is the only inventory of Lakekeeper's own
+  dependencies obtainable, and it is the declared graph from source rather than
+  a bill of materials derived from the artifact.
+- Added `tests/runtime-dependencies.sh`, which asks the dynamic loader to
+  resolve the binary inside the assembled image, confirms the name-resolution
+  modules glibc loads with `dlopen` are present, validates the TLS trust
+  bundle, and confirms time-zone data survived. Static dependency lists cannot
+  catch a missing NSS module, which is how a minimized image fails to reach its
+  database while passing every other check.
+- Documented the hermetic build: what the property is, why it matters, what it
+  does not do, and its indicative effect on cybersecurity control areas,
+  including the one control it constrains rather than strengthens.
+- Added roadmap sections for cybersecurity control documentation and for the
+  tailored SCAP scan profile.
+
 ### Security
+
 
 
 

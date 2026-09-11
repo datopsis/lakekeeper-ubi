@@ -84,7 +84,10 @@ architecture jobs. The implemented image pipeline performs:
 
 1. Trivy build-configuration scanning.
 2. Native architecture builds.
-3. Runtime-requirement verification against the locked base image.
+3. Runtime-requirement verification against the locked base image, and a
+   runtime-dependency check that resolves the binary inside the assembled
+   image, confirms the name-resolution modules glibc loads with `dlopen`, and
+   validates the TLS trust bundle and time-zone data.
 4. Restricted-runtime scenario tests covering the declared and arbitrary runtime
    identities, process privileges, a read-only root with no writable mount,
    migration as a separate unit, catalog and management endpoints, log
@@ -123,8 +126,23 @@ Assembly runs with no network. Podman uses `--network=none` and `--pull=never`;
 the CI build sets `network: none` on the build action. Everything the image
 receives comes from the verified bundle or a digest-pinned base image.
 
+## Crate inventory
+
+The shipped binary carries no embedded dependency metadata, so a scanner
+reading the image can say nothing about Lakekeeper's own dependencies. The
+`artifact lock` job therefore acquires upstream's `Cargo.lock` from the pinned
+release commit, verifies its digest like any other input, catalogues it with
+Syft, and scans it with Grype. The counts are written to the job summary so a
+reviewer sees them without downloading an artifact.
+
+Those findings are report-only. They are upstream's dependencies: this project
+cannot patch them, and blocking on them would tie every release to upstream's
+schedule. Defining what does block a release is a roadmap item. The inventory
+also over-reports, because it is the declared graph from source rather than a
+bill of materials derived from the artifact.
+
 ## Not yet implemented
 
-Upstream publishes no signature for the Lakekeeper release, and the SBOM
-resolves no crate inventory from the binary, so provenance is weaker than the
-build hygiene around it. Both are tracked in [the roadmap](ROADMAP.md).
+Upstream publishes no signature and no artifact attestation for the Lakekeeper
+release; both were checked, and neither exists. The recorded digest remains the
+only integrity evidence for the binary. Tracked in [the roadmap](ROADMAP.md).

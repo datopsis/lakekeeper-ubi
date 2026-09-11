@@ -140,6 +140,26 @@ manifest = {
 print(json.dumps(manifest, indent=2, sort_keys=True))
 ' > "${staging}/bundle.json"
 
+# The upstream dependency manifest is acquired so that the release can publish
+# a crate inventory. The binary carries no embedded dependency metadata, so
+# without this a scanner can say nothing at all about Lakekeeper's own
+# dependencies. See docs/ARTIFACT-ACQUISITION.md for what it does and does not
+# prove.
+crate_url="$(lock_get crateInventory.url)"
+crate_sha256="$(lock_get crateInventory.sha256)"
+crate_size="$(lock_get crateInventory.sizeBytes)"
+log "downloading the upstream dependency manifest"
+curl --fail --location --silent --show-error \
+    --proto '=https' --tlsv1.2 \
+    --output "${staging}/Cargo.lock" \
+    "${crate_url}"
+actual_crate_size="$(size_of "${staging}/Cargo.lock")"
+test "${actual_crate_size}" = "${crate_size}" \
+    || die "Cargo.lock is ${actual_crate_size} bytes, the lock records ${crate_size}."
+actual_crate_digest="$(sha256_of "${staging}/Cargo.lock")"
+test "${actual_crate_digest}" = "${crate_sha256}" \
+    || die "Cargo.lock SHA-256 is ${actual_crate_digest}, the lock records ${crate_sha256}."
+
 # The runtime packages are acquired here for the same reason the binary is:
 # so that assembly consumes only reviewed bytes and needs no repository.
 mkdir -p "${staging}/rpms"

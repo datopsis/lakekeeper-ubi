@@ -14,6 +14,13 @@
     "recordedDigestSource": "GitHub release asset metadata retrieved 2026-09-10",
     "note": "Upstream publishes neither a detached signature nor a checksum file. The digests below are this project's reviewed record of the exact bytes admitted to a build. See docs/ARTIFACT-ACQUISITION.md for the resulting trust limitation and the required lock-update review."
   },
+  "crateInventory": {
+    "url": "https://raw.githubusercontent.com/lakekeeper/lakekeeper/9bd377162345b64a716f0a4fcffe4e7e7f3c7534/Cargo.lock",
+    "sha256": "b3c0994886c65cc7eb38c0dbdc35ec4c330d13186bbc0bd05b148e77ac6a0f56",
+    "sizeBytes": 206154,
+    "declaredPackages": 771,
+    "note": "Pinned to the release commit, not the tag, because a tag can move. This is the DECLARED dependency graph of the source at that commit. It is not proof of what the published binary contains: feature flags, optional dependencies, and build configuration all change which of these crates are actually compiled in. It is a far better basis for triage than the nothing the binary itself carries, and it must never be described as a bill of materials derived from the shipped artifact."
+  },
   "baseImages": {
     "builder": "registry.access.redhat.com/ubi9/ubi-minimal:9.8@sha256:7fbeae18dc9476399f565e68255f602a3374ea8614ba3d14843565131a13ff93",
     "runtime": "registry.access.redhat.com/ubi9/ubi-micro:9.8@sha256:f332c99eb8f798a8486821c91937f10ad64ee83d7e739303be2df051040918f6"

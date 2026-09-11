@@ -168,39 +168,47 @@ Two findings came out of it and are recorded because they are not obvious:
 
 ### 2c: provenance and inventory
 
-- [ ] Implement a lock-update workflow that proposes a reviewed change rather
-  than resolving releases or dependencies during ordinary builds.
-- [ ] Improve publisher verification beyond a recorded digest: adopt upstream
-  artifact attestations if they exist, request upstream signing, or evaluate a
-  pinned-toolchain source build with vendored dependencies. Record the outcome
-  even if no stronger control is currently available.
+Partially implemented. The release now carries a crate inventory: upstream's
+`Cargo.lock` is acquired from the pinned release commit, digest-verified on the
+same terms as everything else, catalogued with Syft, and scanned report-only.
+Two questions were settled by measurement rather than left open:
+
+- **Upstream publishes no artifact attestations.** Queried directly; the API
+  returns 404 for the locked archive digest. Attestation verification is
+  therefore not an available improvement, and the recorded digest remains the
+  only integrity evidence for the binary.
+- **The binary carries no embedded dependency metadata.** It has no
+  `cargo auditable` section, so no scanner can derive an inventory from the
+  shipped artifact. The declared graph from source is the best obtainable
+  substitute, and it over-reports, because feature flags exclude crates that
+  still appear in the lockfile.
+
+- [ ] Define the triage policy for crate findings. They are report-only today,
+  because this project cannot patch upstream's dependencies and blocking on
+  them would tie every release to upstream's schedule. Decide what does block a
+  release, what gets reported upstream, and how an accepted finding expires.
+- [ ] Decide whether the inventory's over-reporting is acceptable for review,
+  or whether to narrow it by resolving the feature set upstream actually
+  builds. A source build would answer this precisely and is the same decision
+  as the FIPS and publisher-verification questions.
+- [ ] Ask upstream to publish either artifact attestations or a `cargo auditable`
+  build. Both would replace a declared inventory with a derived one. Record the
+  request and its outcome so the limitation has a history.
 - [ ] Resolve the open decisions in the
   [container minimization analysis](MINIMIZATION.md), starting with whether to
   strip the upstream binary. Measured: stripping saves 41.6 MB, about 18% of
   the image, and is a larger reduction than removing every package the image
-  could plausibly drop. It also means the shipped bytes stop matching the
-  bytes this project verified, so the lock would have to record both digests.
-  The analysis also records that the fail-closed encryption-key guard is a
-  shell script, so any proposal to remove the shell removes a security control
-  unless it is reimplemented first.
+  could plausibly drop. It also means the shipped bytes stop matching the bytes
+  this project verified, so the lock would have to record both digests. The
+  analysis also records that the fail-closed encryption-key guard is a shell
+  script, so any proposal to remove the shell removes a security control unless
+  it is reimplemented first.
 - [ ] Record source, redistribution, licensing, support lifecycle, and update
-  ownership for every runtime component.
-- [ ] Close the SBOM coverage gap. The current Syft inventory resolves the UBI
-  RPMs and the base image, and **no Lakekeeper crate dependencies**: the upstream
-  release binary carries no embedded dependency metadata that a scanner can read.
-  A release SBOM that omits the application's own dependency tree cannot support
-  vulnerability triage for Lakekeeper itself. Evaluate requesting an upstream
-  SBOM, an upstream `cargo auditable` build, or generating the inventory from the
-  upstream lockfile at the locked release tag, and state the residual gap if none
-  is achievable.
-- [ ] Resolve the `openssl-libs` question. The binary links no TLS library, but
-  OpenSSL is not simply removable: it enters through the `ca-certificates` trust
-  chain, which is the one thing the final stage genuinely needs. It contributes
-  the image's only High finding (CVE-2026-14456, an unfixed QUIC server flaw)
-  against code this image never executes. Decide between keeping RPM-managed
-  trust material with a documented triage rationale, or shipping only extracted
-  trust files and accepting the loss of package provenance and SBOM visibility.
-  Do not treat the second option as obviously better.
+  ownership for every runtime component, and complete the crate license review
+  that the inventory now makes possible.
+- [ ] Implement a lock-update workflow that proposes reviewed changes on a
+  schedule, covering the Lakekeeper release, the UBI digests, the runtime RPMs,
+  and the crate manifest together, so they cannot drift apart.
 
 ## Package 3: supported configuration and runtime qualification
 
@@ -222,6 +230,32 @@ Two findings came out of it and are recorded because they are not obvious:
   supports.
 - [ ] Implement and test structured logging guidance covering request
   correlation, audit events, error responses, and sensitive-value exclusion.
+
+Runtime dependency completeness is now checked by
+`tests/runtime-dependencies.sh`, which asks the dynamic loader to resolve the
+binary inside the image, confirms the name-resolution modules glibc loads with
+`dlopen` are present, counts the certificates in the TLS trust bundle, and
+confirms time-zone data survived. The measured result is that nothing is
+missing: all five needed libraries resolve, NSS is complete, and the bundle
+holds 146 certificates. These remain open:
+
+- [ ] Exercise outbound TLS against a real endpoint using the image's own trust
+  bundle. The bundle is currently validated statically, by size and certificate
+  count, which would not catch a bundle that parses but does not chain. The
+  natural vehicle is the S3-compatible storage profile, so this is coupled to
+  that work rather than worth a synthetic harness now.
+- [ ] Exercise the paths that only appear under real use: a warehouse
+  registration that stores and retrieves an encrypted credential, a table
+  create and read through a query engine, and a task-queue run. The smoke suite
+  proves the server starts and answers; it does not prove the catalog works.
+- [ ] Decide whether to detect `dlopen` use in the binary directly rather than
+  enumerating known cases. The NSS modules were checked because glibc's
+  behavior is known, not because anything measured what the binary loads at
+  runtime. A future upstream release could add a plugin path nobody noticed.
+- [ ] Run the image under a syscall tracer once, to record which files and
+  libraries it actually opens at startup, and compare that against what the
+  image provides. That converts the previous item from reasoning into
+  measurement.
 - [ ] Support and test split read/write database URLs
   (`LAKEKEEPER__PG_DATABASE_URL_READ` alongside `..._WRITE`), which upstream
   recommends for production so writes reach the primary and reads spread across
@@ -289,6 +323,64 @@ Two findings came out of it and are recorded because they are not obvious:
   database compromise, logs, denial of service, and evidence integrity.
 - [ ] Publish a control matrix mapping requirements, implementation,
   configuration, validation, evidence, owner, limitations, and residual risk.
+
+### Cybersecurity control documentation
+
+The indicative mapping in [hermetic build](HERMETIC-BUILD.md) is explicitly not
+an assessment, and no control identifier is cited anywhere in this repository
+on purpose. Citing one implies an assessment that has not happened. These items
+turn that into something an evaluator can use.
+
+- [ ] Publish `docs/SECURITY-CONTROLS.md` defining control ownership across the
+  image, the container runtime, the orchestrator, PostgreSQL, the object store,
+  the identity provider, the TLS-terminating proxy, the network boundary, and
+  the operator. Lakekeeper spreads responsibility across more parties than a
+  single-process image does, and an unassigned control is how a gap survives
+  review.
+- [ ] For each control this image claims to support, record the implementation,
+  the configuration required to get it, the restart behavior, the assessment
+  method, the evidence artifact, the limitation, and the residual risk. A claim
+  without an assessment method is not reviewable.
+- [ ] Document the controls this image explicitly does **not** provide, with
+  the party that must provide them instead: inbound TLS, authentication,
+  authorization, database encryption at rest, backup and restore, network
+  policy, and resource limits.
+- [ ] Record the controls that hermetic assembly strengthens and the one it
+  constrains. Package updates now require a reviewed lock change rather than
+  happening automatically; that is intended, and an assessor should read it in
+  the documentation rather than infer it from a lock file.
+- [ ] Publish a schema-validated OSCAL Component Definition once the control
+  set is stable, and generate the human-readable views from that single source
+  rather than maintaining them separately.
+- [ ] Establish the requirement register that makes any of the above citable:
+  publisher, title, revision, retrieval date, URL, digest, and applicability
+  decision per requirement, with an independent review of the mappings.
+
+### SCAP scan profile
+
+- [ ] Select the scanner and content, pin both by version and digest, and
+  record why that content version applies to this image. An unpinned scanner
+  produces results that cannot be compared across releases.
+- [ ] Decide what is actually scanned. This image has no init system, no
+  sshd, no auditd, no PAM, and no login path, so the large majority of a RHEL
+  host profile is not applicable rather than failing. Scan an
+  ownership-preserving filesystem export per architecture, not a running
+  container, so the results describe the image rather than the test harness.
+- [ ] Build the tailoring file by classifying every rule as image-owned,
+  deployment-owned, inherited, or not applicable, with a recorded rationale per
+  exclusion. An exclusion without a reason is indistinguishable from hiding a
+  failure.
+- [ ] Keep results report-only until the tailored profile has been reviewed,
+  and treat a scanner execution error as blocking even while findings are not.
+  A scan that did not run must never look like a scan that passed.
+- [ ] Publish the tailoring, the content version, the scanner version, the
+  target architecture, and the exact image digest alongside every result, so a
+  result can be tied to what produced it.
+- [ ] Write the statement that accompanies every published result: it reports
+  the selected rules against the evaluated filesystem, and it is not a STIG
+  certification, an accreditation, or a statement about a deployment.
+- [ ] Reconcile SCAP findings against the runtime evidence the smoke suite
+  already produces, so the two do not contradict each other in a review.
 - [ ] Act on the [FIPS analysis](FIPS.md). It records the decisive finding:
   the upstream binary statically links its own cryptography and uses no system
   OpenSSL, so running on a FIPS-enabled host places none of this image's

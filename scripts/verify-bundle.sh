@@ -124,6 +124,21 @@ if test "${actual_libraries}" != "${expected_libraries}"; then
     die "the binary's needed shared libraries do not match the lock."
 fi
 
+# The dependency manifest is the only inventory of Lakekeeper's own
+# dependencies this project can obtain, so it is admitted on the same terms as
+# everything else.
+crate_manifest="${bundle_directory}/Cargo.lock"
+test -f "${crate_manifest}" \
+    || die "the bundle has no Cargo.lock. Re-run scripts/fetch-artifacts.sh --force."
+expected_crate_size="$(lock_get crateInventory.sizeBytes)"
+actual_crate_size="$(size_of "${crate_manifest}")"
+test "${actual_crate_size}" = "${expected_crate_size}" \
+    || die "Cargo.lock is ${actual_crate_size} bytes, the lock records ${expected_crate_size}."
+expected_crate_digest="$(lock_get crateInventory.sha256)"
+actual_crate_digest="$(sha256_of "${crate_manifest}")"
+test "${actual_crate_digest}" = "${expected_crate_digest}" \
+    || die "Cargo.lock SHA-256 is ${actual_crate_digest}, the lock records ${expected_crate_digest}."
+
 # Every locked runtime package must be present and unaltered.
 rpm_directory="${bundle_directory}/rpms"
 test -d "${rpm_directory}" \
@@ -157,7 +172,8 @@ test "${present_rpm_count}" = "${locked_rpm_count}" \
 # Nothing beyond the binary, its manifest, and the locked packages may reach
 # the build context.
 unexpected="$(find "${bundle_directory}" -mindepth 1 -maxdepth 1 \
-    ! -name "${binary_name}" ! -name bundle.json ! -name rpms -printf '%f\n' 2>/dev/null || true)"
+    ! -name "${binary_name}" ! -name bundle.json ! -name rpms ! -name Cargo.lock \
+    -printf '%f\n' 2>/dev/null || true)"
 test -z "${unexpected}" \
     || die "the bundle contains unexpected entries: $(printf '%s' "${unexpected}" | tr '\n' ' ')"
 
