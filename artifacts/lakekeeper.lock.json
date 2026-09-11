@@ -1,0 +1,75 @@
+{
+  "lockSchemaVersion": "1.0.0",
+  "component": "lakekeeper",
+  "upstreamVersion": "0.13.4",
+  "upstreamProject": "https://github.com/lakekeeper/lakekeeper",
+  "upstreamReleaseTag": "v0.13.4",
+  "upstreamReleaseCommit": "9bd377162345b64a716f0a4fcffe4e7e7f3c7534",
+  "upstreamReleasePublished": "2026-09-10T21:27:18Z",
+  "upstreamLicense": "Apache-2.0",
+  "artifactSource": "github-releases-official",
+  "publisherVerification": {
+    "signature": "none-published",
+    "checksumFile": "none-published",
+    "recordedDigestSource": "GitHub release asset metadata retrieved 2026-09-10",
+    "note": "Upstream publishes neither a detached signature nor a checksum file. The digests below are this project's reviewed record of the exact bytes admitted to a build. See docs/ARTIFACT-ACQUISITION.md for the resulting trust limitation and the required lock-update review."
+  },
+  "baseImages": {
+    "builder": "registry.access.redhat.com/ubi9/ubi-minimal:9.8@sha256:7fbeae18dc9476399f565e68255f602a3374ea8614ba3d14843565131a13ff93",
+    "runtime": "registry.access.redhat.com/ubi9/ubi-micro:9.8@sha256:f332c99eb8f798a8486821c91937f10ad64ee83d7e739303be2df051040918f6"
+  },
+  "architectures": {
+    "amd64": {
+      "rustTarget": "x86_64-unknown-linux-gnu",
+      "archive": {
+        "name": "lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
+        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.4/lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
+        "sizeBytes": 62023668,
+        "sha256": "1ee4c9f5e3409d91d61258d8d378a94a9ea9b16db2ba08c0ed0ed85b1dc3dd10"
+      },
+      "binary": {
+        "path": "lakekeeper",
+        "sizeBytes": 167198344,
+        "sha256": "52cdaa0be3724158ce7943f211fcff09a1ae451b5e88916a42b367bdaf1fd705",
+        "buildId": "4c72bb7e7f012512cfd941230b95806aa80de319"
+      },
+      "runtimeRequirements": {
+        "interpreter": "/lib64/ld-linux-x86-64.so.2",
+        "maxGlibcSymbolVersion": "2.34",
+        "neededSharedLibraries": [
+          "libresolv.so.2",
+          "libgcc_s.so.1",
+          "libm.so.6",
+          "libc.so.6",
+          "ld-linux-x86-64.so.2"
+        ]
+      }
+    },
+    "arm64": {
+      "rustTarget": "aarch64-unknown-linux-gnu",
+      "archive": {
+        "name": "lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
+        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.4/lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
+        "sizeBytes": 64240181,
+        "sha256": "14d52e4141b0494e79400e38a773b4682a0e3a98b7f3148943a6c09ca869abe0"
+      },
+      "binary": {
+        "path": "lakekeeper",
+        "sizeBytes": 157974800,
+        "sha256": "fea96fa11ecfff75a82892e70387f4abba02ab4a1ade5f3a40bc1afa63f20889",
+        "buildId": "ffbb2eb99471ac317646e82909def08719e20260"
+      },
+      "runtimeRequirements": {
+        "interpreter": "/lib/ld-linux-aarch64.so.1",
+        "maxGlibcSymbolVersion": "2.34",
+        "neededSharedLibraries": [
+          "libresolv.so.2",
+          "libgcc_s.so.1",
+          "libm.so.6",
+          "libc.so.6",
+          "ld-linux-aarch64.so.1"
+        ]
+      }
+    }
+  }
+}

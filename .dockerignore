@@ -1,0 +1,15 @@
+.git
+.github
+.pre-commit-cache
+.venv
+artifacts
+build
+dist
+docs
+security-results
+tests
+*.key
+*.pem
+*.sarif
+*.spdx.json
+grype*.json

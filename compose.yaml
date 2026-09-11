@@ -1,0 +1,67 @@
+# Development stack only. It exercises the image against a real PostgreSQL
+# instance; it is not a deployment pattern. No credential has a default value:
+# create a local `.env` as described in README.md before starting the stack.
+
+x-lakekeeper-environment: &lakekeeper-environment
+  LAKEKEEPER__PG_DATABASE_URL_WRITE: >-
+    postgres://lakekeeper:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/lakekeeper
+  LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER__PG_ENCRYPTION_KEY:?set LAKEKEEPER__PG_ENCRYPTION_KEY in .env}
+
+x-lakekeeper-hardening: &lakekeeper-hardening
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  postgres:
+    # Development dependency. Replace with the Datopsis postgresql-ubi image
+    # once it publishes a release; see docs/ROADMAP.md.
+    image: docker.io/library/postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_USER: lakekeeper
+      POSTGRES_DB: lakekeeper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username lakekeeper --dbname lakekeeper"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+
+  # `serve` requires an already-migrated database, so migration is a separate
+  # one-shot unit rather than a startup side effect of the server.
+  migrate:
+    image: localhost/lakekeeper-ubi9:development
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["migrate"]
+    environment: *lakekeeper-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    <<: *lakekeeper-hardening
+
+  lakekeeper:
+    image: localhost/lakekeeper-ubi9:development
+    command: ["serve"]
+    environment: *lakekeeper-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8181:8181"
+    stop_signal: SIGTERM
+    <<: *lakekeeper-hardening
+
+volumes:
+  postgres-data:
