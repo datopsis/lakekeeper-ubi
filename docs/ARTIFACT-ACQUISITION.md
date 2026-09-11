@@ -1,12 +1,15 @@
 # External artifact acquisition
 
-Status: partially implemented. The Lakekeeper binary now follows this contract:
-it is acquired and verified by `scripts/fetch-artifacts.sh`, re-verified by
-`scripts/verify-bundle.sh` immediately before assembly, and enters the build
-through a named build context. The builder stage still resolves runtime RPMs
-over the network, so assembly cannot yet run with `--network=none`. Until that
-is closed, this contract is met for the application binary and not for the
-runtime packages.
+Status: implemented. Both the Lakekeeper binary and the runtime packages are
+acquired and verified by `scripts/fetch-artifacts.sh`, re-verified by
+`scripts/verify-bundle.sh` immediately before assembly, and enter the build
+through a named build context. Assembly runs with `--network=none` and
+`--pull=never`: the build resolves nothing, downloads nothing, and installs
+the locked packages with no repository.
+
+What remains is provenance strength rather than build hygiene. Upstream still
+publishes no signature for the Lakekeeper binary, and the SBOM still resolves
+no crate inventory from it. Those are tracked in the roadmap.
 
 ## What this project actually gets from upstream
 
@@ -39,14 +42,17 @@ The binary links no TLS library; upstream builds against a Rust TLS stack.
 `ca-certificates` is installed for trust material used by object-store and
 identity-provider connections, not to satisfy a dynamic link.
 
-Stock UBI 9 Micro already provides every shared library in that table. The
-builder currently installs `glibc` and `libgcc` into the runtime root anyway,
-because `--installroot` targets an empty root and therefore resolves a complete
-base system. That is redundant work whose only effect is a larger overlay and a
-longer package inventory. The genuine delta between the final stage and what the
-image needs is `ca-certificates` and `tzdata`, plus the trust chain the former
-requires, which is what a future RPM lock has to cover. Removing the redundancy
-is tracked in the roadmap.
+Stock UBI 9 Micro already provides every shared library in that table, so the
+runtime package set is resolved against the Micro RPM database rather than an
+empty root. That yields the genuine delta, 12 packages, instead of a duplicated
+base system of roughly three dozen. Removing the duplication also removed
+`openssl-libs` and with it the image's only High vulnerability finding.
+
+One correction that the resolution surfaced: UBI Micro records `tzdata` as
+installed while shipping none of its 1872 files. A delta resolved purely from
+that database would silently omit time-zone data, so `tzdata` is requested
+explicitly and reinstalled. The general lesson is that the Micro RPM database
+is not a reliable description of the Micro filesystem.
 
 ## Trust limitation
 

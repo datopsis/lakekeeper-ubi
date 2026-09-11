@@ -174,6 +174,11 @@ assuming it holds for a future upstream release.
   trust limitation.
 - [Configuration](docs/CONFIGURATION.md) documents the variables this image
   adds, the fail-closed encryption-key guard, and what that guard does not do.
+- [FIPS analysis](docs/FIPS.md) records why this image cannot support a FIPS
+  claim today, including why running on a FIPS-enabled host does not confer
+  one.
+- [Container minimization analysis](docs/MINIMIZATION.md) measures where the
+  image's size actually is and what each reduction would cost.
 - [Continuous integration](docs/CI.md) documents current automation, local
   checks, and the planned image assurance pipeline.
 - [Changelog](CHANGELOG.md) records notable completed changes.

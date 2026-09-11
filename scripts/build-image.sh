@@ -73,10 +73,11 @@ test "${architecture}" = "${host}" \
 "$(dirname -- "${BASH_SOURCE[0]}")/verify-bundle.sh" \
     --arch "${architecture}" --bundle-dir "${bundle_directory}"
 
-pull_argument=(--pull=never)
+isolation_arguments=(--pull=never --network=none)
 if ! grep -qi podman <<< "$("${runtime}" --version 2>&1)"; then
-    # Docker spells the same intent differently.
-    pull_argument=(--pull=false)
+    # Docker spells pulling differently and has no per-build network flag;
+    # its equivalent isolation is configured on the builder instead.
+    isolation_arguments=(--pull=false)
 fi
 
 log "building ${image_tag} for ${architecture}"
@@ -84,7 +85,7 @@ log "building ${image_tag} for ${architecture}"
     --format docker \
     --file "${REPOSITORY_ROOT}/Containerfile" \
     --build-context "bundle=${bundle_directory}" \
-    "${pull_argument[@]}" \
+    "${isolation_arguments[@]}" \
     --tag "${image_tag}" \
     "${REPOSITORY_ROOT}"
 

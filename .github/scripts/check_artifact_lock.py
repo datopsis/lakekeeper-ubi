@@ -51,18 +51,62 @@ def main() -> int:
         )
 
     # Artifact acquisition happens before the build. A Containerfile that can
-    # download is a Containerfile that can consume something unreviewed, so the
-    # absence of a fetch is itself a checked property rather than a convention.
+    # download, or resolve a package, is a Containerfile that can consume
+    # something unreviewed, so the absence of both is a checked property rather
+    # than a convention.
     containerfile = CONTAINERFILE_PATH.read_text(encoding="utf-8")
-    for forbidden in ("curl ", "wget ", "https://github.com/lakekeeper"):
+    forbidden_tokens = (
+        "curl ",
+        "wget ",
+        "https://github.com/lakekeeper",
+        "dnf ",
+        "microdnf ",
+        "--releasever",
+    )
+    for forbidden in forbidden_tokens:
         if forbidden in containerfile:
             failures.append(
-                f"the Containerfile must not acquire artifacts, found {forbidden!r}"
+                f"the Containerfile must not acquire or resolve inputs, found {forbidden!r}"
             )
-    if "COPY --from=bundle" not in containerfile:
-        failures.append(
-            "the Containerfile must take the binary from the verified bundle context"
-        )
+    for required in ("COPY --from=bundle rpms/", "COPY --from=bundle"):
+        if required not in containerfile:
+            failures.append(
+                f"the Containerfile must consume the verified bundle, missing {required!r}"
+            )
+
+    # The runtime package manifest is what makes a network-free build possible.
+    requested = lock.get("runtimePackages", {}).get("requested") or []
+    if not requested:
+        failures.append("runtimePackages.requested must list the packages the image asks for")
+
+    package_names = {}
+    for architecture, entry in lock["architectures"].items():
+        rpms = entry.get("rpms") or []
+        if not rpms:
+            failures.append(f"{architecture}: no runtime package manifest recorded")
+            continue
+        names = set()
+        for rpm in rpms:
+            for field in ("filename", "url", "sizeBytes", "sha256"):
+                if not rpm.get(field):
+                    failures.append(
+                        f"{architecture}: {rpm.get('filename', '?')} is missing {field}"
+                    )
+            if not str(rpm.get("url", "")).startswith("https://"):
+                failures.append(
+                    f"{architecture}: {rpm.get('filename')} must be fetched over HTTPS"
+                )
+            names.add(rpm["filename"].rsplit("-", 2)[0])
+        package_names[architecture] = names
+
+    # The architectures should ship the same packages. A difference is not
+    # automatically wrong, but it is never something to discover after release.
+    if len(package_names) == 2:
+        first, second = package_names.values()
+        if first != second:
+            failures.append(
+                f"architectures resolve different packages: {sorted(first ^ second)}"
+            )
 
     # A digest recorded without its size is not a complete record.
     for architecture, entry in lock["architectures"].items():

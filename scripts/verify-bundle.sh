@@ -124,10 +124,41 @@ if test "${actual_libraries}" != "${expected_libraries}"; then
     die "the binary's needed shared libraries do not match the lock."
 fi
 
-# Nothing beyond the binary and its manifest may reach the build context.
+# Every locked runtime package must be present and unaltered.
+rpm_directory="${bundle_directory}/rpms"
+test -d "${rpm_directory}" \
+    || die "the bundle has no rpms directory. Re-run scripts/fetch-artifacts.sh --force."
+
+locked_rpm_count=0
+while IFS=$'\t' read -r filename expected_rpm_size expected_rpm_digest; do
+    locked_rpm_count=$((locked_rpm_count + 1))
+    rpm_path="${rpm_directory}/${filename}"
+    test -f "${rpm_path}" || die "the bundle is missing ${filename}."
+    rpm_size="$(size_of "${rpm_path}")"
+    test "${rpm_size}" = "${expected_rpm_size}" \
+        || die "${filename} is ${rpm_size} bytes, the lock records ${expected_rpm_size}."
+    rpm_digest="$(sha256_of "${rpm_path}")"
+    test "${rpm_digest}" = "${expected_rpm_digest}" \
+        || die "${filename} SHA-256 is ${rpm_digest}, the lock records ${expected_rpm_digest}."
+done < <(LOCK_FILE="${LOCK_FILE}" ARCHITECTURE="${architecture}" python3 -c '
+import json
+import os
+
+lock = json.load(open(os.environ["LOCK_FILE"], encoding="utf-8"))
+for entry in lock["architectures"][os.environ["ARCHITECTURE"]]["rpms"]:
+    print("\t".join([entry["filename"], str(entry["sizeBytes"]), entry["sha256"]]))
+')
+
+# An unlocked package in the bundle would be installed without review.
+present_rpm_count="$(find "${rpm_directory}" -mindepth 1 -maxdepth 1 -type f | wc -l)"
+test "${present_rpm_count}" = "${locked_rpm_count}" \
+    || die "the bundle holds ${present_rpm_count} packages, the lock records ${locked_rpm_count}."
+
+# Nothing beyond the binary, its manifest, and the locked packages may reach
+# the build context.
 unexpected="$(find "${bundle_directory}" -mindepth 1 -maxdepth 1 \
-    ! -name "${binary_name}" ! -name bundle.json -printf '%f\n' 2>/dev/null || true)"
+    ! -name "${binary_name}" ! -name bundle.json ! -name rpms -printf '%f\n' 2>/dev/null || true)"
 test -z "${unexpected}" \
     || die "the bundle contains unexpected entries: $(printf '%s' "${unexpected}" | tr '\n' ' ')"
 
-log "bundle verified: ${binary_name} ${expected_version} (${architecture}), glibc ${actual_glibc}"
+log "bundle verified: ${binary_name} ${expected_version} (${architecture}), glibc ${actual_glibc}, ${locked_rpm_count} runtime packages"

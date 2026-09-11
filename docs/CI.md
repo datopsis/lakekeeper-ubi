@@ -119,10 +119,12 @@ never been shown to reject is not evidence.
 The Containerfile is checked for the absence of a fetch, so the build cannot
 quietly regain the ability to download.
 
+Assembly runs with no network. Podman uses `--network=none` and `--pull=never`;
+the CI build sets `network: none` on the build action. Everything the image
+receives comes from the verified bundle or a digest-pinned base image.
+
 ## Not yet implemented
 
-The builder stage still runs package management against the Red Hat CDN, so the
-build is not yet hermetic and cannot run with `--network=none`. Locking those
-RPMs is Package 2b in [the roadmap](ROADMAP.md). Until it lands, the
-[artifact-acquisition contract](ARTIFACT-ACQUISITION.md) is met for the
-Lakekeeper binary and not for the runtime packages.
+Upstream publishes no signature for the Lakekeeper release, and the SBOM
+resolves no crate inventory from the binary, so provenance is weaker than the
+build hygiene around it. Both are tracked in [the roadmap](ROADMAP.md).

@@ -128,6 +128,27 @@ else
     echo "skip: no ${other_architecture} bundle present to test architecture confusion"
 fi
 
+# The runtime packages are admitted on the same terms as the binary. They are
+# installed into the image with no dependency resolution, so an unlocked or
+# altered package would be installed exactly as given.
+bundle="$(fresh_bundle tampered_rpm)"
+first_rpm="$(find "${bundle}/rpms" -name "*.rpm" | sort | head -1)"
+printf "x" | dd of="${first_rpm}" bs=1 seek=512 conv=notrunc status=none
+expect_rejected "a tampered runtime package" "${bundle}"
+
+bundle="$(fresh_bundle missing_rpm)"
+rm -f -- "$(find "${bundle}/rpms" -name "*.rpm" | sort | head -1)"
+expect_rejected "a missing runtime package" "${bundle}"
+
+# An unlocked package would reach the image without ever being reviewed.
+bundle="$(fresh_bundle extra_rpm)"
+cp -- "$(find "${bundle}/rpms" -name "*.rpm" | sort | head -1)" "${bundle}/rpms/unreviewed.rpm"
+expect_rejected "an unlocked extra runtime package" "${bundle}"
+
+bundle="$(fresh_bundle missing_rpm_dir)"
+rm -rf -- "${bundle}/rpms"
+expect_rejected "a bundle with no runtime packages at all" "${bundle}"
+
 # The cases above all fail at the digest, because that check runs first. The
 # ELF properties in the lock therefore defend against something different: a
 # lock whose recorded facts drift from the bytes it names, which is an authoring

@@ -138,6 +138,9 @@ jobs:
           file: Containerfile
           build-contexts: |
             bundle=.artifact-bundle/${{ matrix.architecture }}
+          # Build steps get no network. Every input the image receives comes
+          # from the verified bundle or a digest-pinned base image.
+          network: none
           platforms: ${{ matrix.platform }}
           load: true
           push: false

@@ -138,20 +138,33 @@ fetch.
 
 ### 2b: take the RPMs out of the build
 
-- [ ] Stop installing `glibc` and `libgcc` into the runtime root. They are
-  already present in the final stage, and reinstalling them inflates the overlay
-  and the package inventory without changing the filesystem's behavior.
-- [ ] Determine the exact delta the final stage is missing, expected to be
-  `ca-certificates`, `tzdata`, and the trust chain, and confirm by building the
-  image without the redundant packages and re-running the full test suite.
-- [ ] Extend the artifact lock with an RPM manifest per architecture: name,
-  epoch, version, release, architecture, download location, size, SHA-256,
-  signing key fingerprint, and source RPM.
-- [ ] Acquire and verify those RPMs in `scripts/fetch-artifacts.sh`, including
-  Red Hat signature verification against a pinned key, and install them into the
-  runtime root from local files with no repository metadata.
-- [ ] Switch assembly to `--network=none` and prove the build fails if it is
-  removed, so the hermetic property is tested rather than assumed.
+Implemented. Assembly now runs with `--network=none` and `--pull=never`. The
+runtime package delta is resolved against the UBI Micro RPM database rather
+than an empty root, so it is 12 packages instead of a duplicated base system.
+`scripts/update-rpm-lock.sh` regenerates the manifest as a reviewable change,
+`scripts/fetch-artifacts.sh` acquires and digest-verifies the packages, and the
+build installs them with no repository and no dependency resolution, checking
+Red Hat signatures against the keys already in the Micro database. The
+Containerfile is checked for the absence of any fetch or package resolution.
+
+Two findings came out of it and are recorded because they are not obvious:
+
+- **UBI Micro's RPM database does not describe its filesystem.** It records
+  `tzdata` as installed, owning 1872 files, while shipping none of them. This
+  image therefore reinstalls `tzdata` deliberately. The general problem is
+  worse than the specific one: a scanner reading that database will report
+  packages whose files are absent, in either direction.
+- **Removing the duplicated base removed `openssl-libs`**, and with it the
+  image's only High vulnerability finding. The binary links no TLS library, so
+  OpenSSL was only ever present because an empty installroot pulled in a full
+  base system.
+
+- [ ] Decide how to detect that UBI Micro's recorded package set has drifted
+  from its actual filesystem in some new way at the next base-image update.
+  The `tzdata` case was found by accident, not by a check.
+- [ ] Docker's build backend has no per-build network flag equivalent to
+  Podman's `--network=none`; CI sets `network: none` on the action instead.
+  Confirm the two are equivalent in effect, or record where they differ.
 
 ### 2c: provenance and inventory
 
@@ -161,10 +174,15 @@ fetch.
   artifact attestations if they exist, request upstream signing, or evaluate a
   pinned-toolchain source build with vendored dependencies. Record the outcome
   even if no stronger control is currently available.
-- [ ] Decide whether to ship the unstripped upstream binary or strip it,
-  weighing image size against incident-analysis value, and record the decision
-  with its effect on the recorded binary digest. The unstripped binary is most
-  of the image: roughly 167 MB of a 247 MB image, against a 24 MB base.
+- [ ] Resolve the open decisions in the
+  [container minimization analysis](MINIMIZATION.md), starting with whether to
+  strip the upstream binary. Measured: stripping saves 41.6 MB, about 18% of
+  the image, and is a larger reduction than removing every package the image
+  could plausibly drop. It also means the shipped bytes stop matching the
+  bytes this project verified, so the lock would have to record both digests.
+  The analysis also records that the fail-closed encryption-key guard is a
+  shell script, so any proposal to remove the shell removes a security control
+  unless it is reimplemented first.
 - [ ] Record source, redistribution, licensing, support lifecycle, and update
   ownership for every runtime component.
 - [ ] Close the SBOM coverage gap. The current Syft inventory resolves the UBI
@@ -271,9 +289,13 @@ fetch.
   database compromise, logs, denial of service, and evidence integrity.
 - [ ] Publish a control matrix mapping requirements, implementation,
   configuration, validation, evidence, owner, limitations, and residual risk.
-- [ ] Define the cryptographic boundary, covering secret encryption at rest and
-  transport security, and document why a UBI base does not independently
-  establish FIPS validation.
+- [ ] Act on the [FIPS analysis](FIPS.md). It records the decisive finding:
+  the upstream binary statically links its own cryptography and uses no system
+  OpenSSL, so running on a FIPS-enabled host places none of this image's
+  cryptography inside a validated boundary. Any FIPS requirement applied to
+  this component is currently **not met** and must be recorded as such rather
+  than deferred or implied. Closing it depends on the crate inventory that
+  Package 2c is still missing.
 - [ ] Document vulnerability triage for both UBI packages and the Rust
   dependency tree, patch SLAs, exceptions with expiry, incident response,
   backup/restore responsibilities, logging integration, monitoring, resource

@@ -72,7 +72,26 @@ but container releases use the upstream-derived format documented in
   to TLS, which Lakekeeper does not terminate, along with the threat model it
   actually addresses.
 
+- Made image assembly hermetic. The build runs with no network and no image
+  pulling: runtime packages are acquired and digest-verified beforehand, then
+  installed with no repository and no dependency resolution, with Red Hat
+  signatures checked against the keys already in the base image's RPM database.
+- Added `scripts/update-rpm-lock.sh`, which regenerates the runtime package
+  manifest as a reviewable lock change rather than resolving dependencies during
+  a build.
+- Resolved the runtime package set against the UBI Micro RPM database instead of
+  an empty root, which is the genuine delta the final stage needs. This removed
+  a duplicated base system, reduced the image from 246.6 MB to 228.8 MB, and cut
+  the runtime package manifest to 12 packages.
+- Extended the admission gate and its negative tests to cover runtime packages,
+  including a tampered package, a missing package, an unlocked extra package,
+  and a bundle with no packages at all.
+- Added a FIPS analysis recording why this image cannot support a FIPS claim,
+  and a container minimization analysis measuring where the image's size
+  actually is and what each possible reduction would cost.
+
 ### Security
+
 
 
 - Made the image fail closed when the secret encryption key is unset. Upstream
@@ -93,3 +112,12 @@ but container releases use the upstream-derived format documented in
   operator who overrides the entrypoint bypasses it.
 - Recorded the `allow-all` default authorization backend and the pre-bootstrap
   window as deployment-critical operator responsibilities.
+- Removed `openssl-libs` from the image, and with it the only High vulnerability
+  finding, an unfixed OpenSSL QUIC server flaw. The binary links no TLS library,
+  so OpenSSL was present only because an empty installroot resolved a full base
+  system. The removal was a side effect of resolving the package delta
+  correctly, not a targeted exclusion.
+- Recorded that the UBI Micro RPM database does not describe its own filesystem:
+  it reports `tzdata` as installed while shipping none of its 1872 files. This
+  image reinstalls it explicitly. A scanner reading that database can report
+  packages whose files are absent, in either direction.

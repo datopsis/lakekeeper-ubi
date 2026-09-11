@@ -3,34 +3,29 @@
 ARG UBI_MINIMAL_IMAGE="registry.access.redhat.com/ubi9/ubi-minimal:9.8@sha256:7fbeae18dc9476399f565e68255f602a3374ea8614ba3d14843565131a13ff93"
 ARG UBI_MICRO_IMAGE="registry.access.redhat.com/ubi9/ubi-micro:9.8@sha256:f332c99eb8f798a8486821c91937f10ad64ee83d7e739303be2df051040918f6"
 
+# The Micro filesystem is the starting point for the runtime root, so package
+# installation resolves against the database the final stage actually has. An
+# empty installroot would instead reinstall a base system that is already
+# present, inflating both the image and its package inventory.
+FROM ${UBI_MICRO_IMAGE} AS microbase
+
 FROM ${UBI_MINIMAL_IMAGE} AS builder
 
-# Install the runtime dependency closure into a separate root. The UBI Micro
-# final stage receives no package-management commands or builder caches.
-#
-# This stage is the last remaining network dependency of the build. The
-# Lakekeeper binary is no longer downloaded here: it arrives as a verified
-# bundle prepared by scripts/fetch-artifacts.sh. Removing package resolution
-# from this stage, so assembly can run with --network=none, is tracked as
-# Package 2b in docs/ROADMAP.md.
-# hadolint ignore=DL3041
-RUN microdnf install -y dnf \
-    && mkdir -p /runtime \
-    && dnf install -y \
-        --installroot=/runtime \
-        --releasever=9 \
-        --setopt=install_weak_deps=0 \
-        --setopt=keepcache=0 \
-        glibc \
-        libgcc \
-        ca-certificates \
-        tzdata \
-    && dnf clean all \
-    && microdnf clean all \
+COPY --from=microbase / /runtime
+# `bundle` is a named build context holding the verified upstream binary and
+# the locked runtime packages, produced by scripts/fetch-artifacts.sh.
+# hadolint ignore=DL3022
+COPY --from=bundle rpms/ /rpms/
+
+# Install the locked packages with no repository, no dependency resolution,
+# and no network. Signatures are checked against the Red Hat keys already in
+# the Micro RPM database, so publisher verification happens here even though
+# the download happened earlier and elsewhere.
+RUN rpmkeys --root /runtime --checksig /rpms/*.rpm \
+    && rpm --root /runtime --upgrade --replacepkgs --quiet /rpms/*.rpm \
     && rm -rf \
         /runtime/run/* \
         /runtime/tmp/* \
-        /runtime/var/cache/dnf \
         /runtime/var/log/* \
         /runtime/var/tmp/*
 
@@ -48,11 +43,9 @@ LABEL org.opencontainers.image.title="Lakekeeper on Red Hat UBI 9" \
       io.datopsis.lakekeeper.upstream-version="${LAKEKEEPER_VERSION}"
 
 COPY --from=builder /runtime/ /
-# `bundle` is a named build context holding the verified upstream binary. It is
-# produced and checked by scripts/fetch-artifacts.sh and re-checked by
-# scripts/build-image.sh immediately before this build runs. A plain
-# `podman build .` will fail here, which is the intended behavior: the image
-# must not be assemblable from unverified inputs.
+# The binary arrives from the same verified bundle. A plain `podman build .`
+# fails here, which is the intended behavior: the image must not be assemblable
+# from unverified inputs.
 # DL3022 expects --from to name a build stage. `bundle` is a named build
 # context, which hadolint does not model; there is no stage alias to use
 # instead, and routing the binary through a stage would put it back in the

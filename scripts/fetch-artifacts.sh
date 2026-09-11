@@ -140,6 +140,35 @@ manifest = {
 print(json.dumps(manifest, indent=2, sort_keys=True))
 ' > "${staging}/bundle.json"
 
+# The runtime packages are acquired here for the same reason the binary is:
+# so that assembly consumes only reviewed bytes and needs no repository.
+mkdir -p "${staging}/rpms"
+while IFS=$'\t' read -r filename url expected_rpm_size expected_rpm_digest; do
+    log "downloading ${filename}"
+    curl --fail --location --silent --show-error \
+        --proto '=https' --tlsv1.2 \
+        --output "${staging}/rpms/${filename}" \
+        "${url}"
+    rpm_size="$(size_of "${staging}/rpms/${filename}")"
+    test "${rpm_size}" = "${expected_rpm_size}" \
+        || die "${filename} is ${rpm_size} bytes, the lock records ${expected_rpm_size}."
+    rpm_digest="$(sha256_of "${staging}/rpms/${filename}")"
+    test "${rpm_digest}" = "${expected_rpm_digest}" \
+        || die "${filename} SHA-256 is ${rpm_digest}, the lock records ${expected_rpm_digest}."
+done < <(LOCK_FILE="${LOCK_FILE}" ARCHITECTURE="${architecture}" python3 -c '
+import json
+import os
+
+lock = json.load(open(os.environ["LOCK_FILE"], encoding="utf-8"))
+for entry in lock["architectures"][os.environ["ARCHITECTURE"]]["rpms"]:
+    print("\t".join([
+        entry["filename"],
+        entry["url"],
+        str(entry["sizeBytes"]),
+        entry["sha256"],
+    ]))
+')
+
 # The archive itself is not part of the bundle. Only the verified binary and
 # its manifest may reach a build context.
 rm -f -- "${archive_path}"
