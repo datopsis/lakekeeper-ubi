@@ -41,11 +41,16 @@ These are properties of upstream Lakekeeper that operators must handle. They
 are documented here because a deployment that ignores them is insecure even
 when the image itself is current.
 
-- **The secret encryption key has an insecure default.** If
-  `LAKEKEEPER__PG_ENCRYPTION_KEY` is unset, Lakekeeper starts anyway, logs a
-  warning, and encrypts stored storage credentials with a publicly known
-  default key. Always supply a unique key, and treat a deployment that never
-  set one as having exposed every stored credential.
+- **The secret encryption key has an insecure upstream default.** If
+  `LAKEKEEPER__PG_ENCRYPTION_KEY` is unset, upstream Lakekeeper starts anyway,
+  logs a warning, and encrypts stored storage credentials with a publicly
+  known default key. **This image fails closed on that condition by default**
+  and refuses to start, which can be turned off with
+  `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY=false`. The guard checks presence, not
+  strength, and cannot undo exposure: treat a catalog that ever ran without a
+  key as having exposed every credential stored during that period, because
+  adding a key later does not re-encrypt existing rows. See
+  [configuration](docs/CONFIGURATION.md).
 - **The default authorization backend is `allow-all`.** A catalog deployed
   without authentication and authorization must not be reachable from an
   untrusted network.

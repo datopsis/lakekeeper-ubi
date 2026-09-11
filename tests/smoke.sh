@@ -12,6 +12,9 @@ database="${prefix}-db"
 primary="${prefix}-primary"
 arbitrary="${prefix}-arbitrary"
 default_key="${prefix}-default-key"
+missing_key="${prefix}-missing-key"
+invalid_toggle="${prefix}-invalid-toggle"
+blank_key="${prefix}-blank-key"
 unmigrated="${prefix}-unmigrated"
 unreachable="${prefix}-unreachable"
 
@@ -35,8 +38,9 @@ database_url="postgres://lakekeeper:${postgres_password}@${database}:5432/lakeke
 
 cleanup() {
     "${runtime}" rm --force \
-        "${primary}" "${arbitrary}" "${default_key}" "${unmigrated}" \
-        "${unreachable}" "${database}" \
+        "${primary}" "${arbitrary}" "${default_key}" "${missing_key}" \
+        "${invalid_toggle}" "${blank_key}" "${unmigrated}" "${unreachable}" \
+        "${database}" \
         >/dev/null 2>&1 || true
     "${runtime}" network rm --force "${network}" >/dev/null 2>&1 || true
 }
@@ -121,6 +125,7 @@ wait_for_catalog() {
 
 wait_for_exit() {
     local name="$1"
+    local expected_code="${2:-}"
     local state
     local exit_code
     local _
@@ -128,7 +133,11 @@ wait_for_exit() {
         state="$("${runtime}" inspect --format '{{.State.Status}}' "${name}")"
         if test "${state}" != "running"; then
             exit_code="$("${runtime}" inspect --format '{{.State.ExitCode}}' "${name}")"
-            test "${exit_code}" != "0"
+            if test -n "${expected_code}"; then
+                test "${exit_code}" = "${expected_code}"
+            else
+                test "${exit_code}" != "0"
+            fi
             return
         fi
         sleep 1
@@ -197,6 +206,12 @@ assert_process_security "${primary}"
 "${runtime}" exec "${primary}" sh -c \
     '! (printf probe > /root-filesystem-probe) >/dev/null 2>&1'
 "${runtime}" exec "${primary}" test ! -w /usr/local/bin/lakekeeper
+# The entrypoint must exec, leaving the server as PID 1 so that it receives
+# signals directly and no shell remains in the container.
+# The variable expands in the inner container shell, not this script.
+# shellcheck disable=SC2016
+"${runtime}" exec "${primary}" sh -c \
+    'read -r comm < /proc/1/comm; test "${comm}" = "lakekeeper"'
 test "$("${runtime}" exec "${primary}" lakekeeper version)" = "${expected_version}"
 
 binding="$("${runtime}" port "${primary}" 8181/tcp)"
@@ -245,16 +260,71 @@ test "$("${runtime}" exec "${arbitrary}" id -u)" = "10001"
 test "$("${runtime}" exec "${arbitrary}" id -g)" = "0"
 assert_process_security "${arbitrary}"
 
-# Upstream starts with a publicly known default encryption key when none is
-# supplied, and only warns. This asserts the current upstream behavior so a
-# change in it is noticed deliberately rather than silently inherited. See
-# Package 1 in docs/ROADMAP.md.
+# The image adds a fail-closed guard for the secret encryption key.
+#
+# Upstream starts with a publicly known default key when none is supplied and
+# only warns, so a deployment can look healthy indefinitely while every stored
+# storage credential is decryptable by anyone. These cases pin both the guard
+# and the upstream behavior it replaces. See docs/CONFIGURATION.md.
+
+# Default: a missing key is a startup failure, not a silent fallback.
+"${runtime}" run --detach --name "${missing_key}" \
+    --network "${network}" \
+    "${readonly_runtime_args[@]}" \
+    --cap-drop ALL \
+    --security-opt "${no_new_privileges}" \
+    --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
+    "${image}" serve >/dev/null
+wait_for_exit "${missing_key}" 78
+missing_key_logs="$("${runtime}" logs "${missing_key}" 2>&1)"
+# The diagnostic must name the variable to set and the way to opt out.
+grep -Fq 'LAKEKEEPER__PG_ENCRYPTION_KEY' <<< "${missing_key_logs}"
+grep -Fq 'LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY=false' <<< "${missing_key_logs}"
+# The guard must refuse before the server reaches the database.
+if grep -Fq 'Using default encryption key' <<< "${missing_key_logs}"; then
+    echo "The catalog started despite the fail-closed guard" >&2
+    exit 1
+fi
+
+# A key of only whitespace is empty, not a value.
+"${runtime}" run --detach --name "${blank_key}" \
+    --network "${network}" \
+    "${readonly_runtime_args[@]}" \
+    --cap-drop ALL \
+    --security-opt "${no_new_privileges}" \
+    --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
+    --env "LAKEKEEPER__PG_ENCRYPTION_KEY=   " \
+    "${image}" serve >/dev/null
+wait_for_exit "${blank_key}" 78
+
+# An unreadable toggle fails closed rather than being ignored.
+"${runtime}" run --detach --name "${invalid_toggle}" \
+    --network "${network}" \
+    "${readonly_runtime_args[@]}" \
+    --cap-drop ALL \
+    --security-opt "${no_new_privileges}" \
+    --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
+    --env "LAKEKEEPER__PG_ENCRYPTION_KEY=${encryption_key}" \
+    --env "LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY=perhaps" \
+    "${image}" serve >/dev/null
+wait_for_exit "${invalid_toggle}" 78
+grep -Fq 'LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY' <<< \
+    "$("${runtime}" logs "${invalid_toggle}" 2>&1)"
+
+# Informational commands stay usable without a key so that an operator can
+# still diagnose a container that the guard refuses to start.
+test "$("${runtime}" run --rm "${image}" version)" = "${expected_version}"
+
+# Opting out restores upstream behavior exactly: the server starts and warns.
+# This also detects an upstream change to fail-closed, which would be good
+# news but must be noticed deliberately rather than silently inherited.
 "${runtime}" run --detach --name "${default_key}" \
     --network "${network}" \
     "${readonly_runtime_args[@]}" \
     --cap-drop ALL \
     --security-opt "${no_new_privileges}" \
     --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
+    --env "LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY=false" \
     "${image}" serve >/dev/null
 wait_for_log "${default_key}" 'Using default encryption key'
 "${runtime}" rm --force "${default_key}" >/dev/null

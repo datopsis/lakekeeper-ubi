@@ -75,29 +75,25 @@ Work proceeds in this dependency order:
 
 ## Package 1: secret and configuration failure modes
 
-Upstream Lakekeeper starts successfully when
-`LAKEKEEPER__PG_ENCRYPTION_KEY` is unset. It falls back to a **default,
-publicly known encryption key** and emits only a `WARN` log line. Stored
-storage credentials are then encrypted with a key that provides no
-confidentiality against anyone who reads the upstream source. This behavior was
-observed directly against the locked version.
+The encryption-key decision is made and implemented: the image fails closed by
+default, with a documented opt-out. See `docs/CONFIGURATION.md`. The items
+below are what remains.
 
-- [ ] Decide and document whether this image fails closed when the encryption
-  key is unset, or preserves upstream behavior and pushes the control entirely
-  into deployment. Record the decision, its rationale, and its compatibility
-  impact.
-- [ ] If failing closed is chosen, implement the check without introducing a
-  privileged entrypoint phase or a privilege transition, and test that the
-  diagnostic names the variable without echoing any secret value.
-- [ ] Add a test that asserts the unsafe-default warning is absent whenever a
-  key is supplied, so a regression in configuration plumbing cannot pass
-  silently.
 - [ ] Inventory every other configuration value whose absence degrades security
   rather than failing, and classify each one as image-enforced,
-  deployment-enforced, or accepted with rationale.
+  deployment-enforced, or accepted with rationale. The encryption key was the
+  first such value found, not necessarily the only one.
+- [ ] Decide whether the guard should also reject a key that matches the known
+  upstream default value, and whether to require a minimum length or entropy.
+  It currently checks presence only, which is deliberate but weak.
+- [ ] Document the encryption-key rotation procedure. Rotation is a data
+  operation, not a restart, because existing rows were encrypted with the
+  previous key. Until this is written and tested, `docs/CONFIGURATION.md` must
+  keep telling operators not to assume otherwise.
 - [ ] Verify that the encryption key, database password, and object-store
   credentials never appear in logs, error responses, the management API, or
-  image layers.
+  image layers. The smoke suite covers container logs; the other surfaces are
+  not yet covered.
 - [ ] Investigate the observation that `wait-for-db` exited `0` against an
   unresolvable database host. If confirmed, document that it must not be used
   as a readiness gate and report it upstream.

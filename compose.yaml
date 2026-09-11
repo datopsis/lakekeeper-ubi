@@ -1,6 +1,11 @@
 # Development stack only. It exercises the image against a real PostgreSQL
 # instance; it is not a deployment pattern. No credential has a default value:
 # create a local `.env` as described in README.md before starting the stack.
+#
+# Compose refuses to start without the encryption key, and the image refuses
+# again at startup. The two checks are deliberate duplicates: the first gives a
+# fast local error, the second protects every deployment that does not use
+# Compose. See docs/CONFIGURATION.md.
 
 x-lakekeeper-environment: &lakekeeper-environment
   LAKEKEEPER__PG_DATABASE_URL_WRITE: >-

@@ -75,17 +75,55 @@ matches the exact claim and assessed boundary.
 ## Operator responsibilities you cannot skip
 
 Three upstream behaviors make the difference between a reasonable deployment
-and an insecure one. They belong to the deployment, not the image:
+and an insecure one. The image now enforces the first one by default; the
+other two remain deployment responsibilities:
 
-1. **Set `LAKEKEEPER__PG_ENCRYPTION_KEY` to a unique value.** If it is unset,
-   Lakekeeper starts anyway and encrypts stored storage credentials with a
-   publicly known default key, logging only a warning.
+1. **Set `LAKEKEEPER__PG_ENCRYPTION_KEY` to a unique value.** Enforced by this
+   image by default, as described below.
 2. **Do not expose an unauthenticated catalog.** The default authorization
    backend is `allow-all`.
 3. **Control reachability until the catalog is bootstrapped.** A new catalog is
    open for bootstrap, which sets the initial administrator.
 
 See [the security policy](SECURITY.md) for the full statement.
+
+## Secret encryption key
+
+`LAKEKEEPER__PG_ENCRYPTION_KEY` protects the storage credentials Lakekeeper
+persists in PostgreSQL.
+
+**Upstream treats it as optional.** If it is unset, Lakekeeper starts normally,
+logs one warning, and encrypts stored credentials with a default key published
+in the upstream source. Nothing fails. The service reports healthy and query
+engines connect. A deployment can run that way for a long time while every
+credential it holds is decryptable by anyone who reads public source code.
+
+**This image fails closed by default instead.** When
+`LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY` is `true`, which is the default, a
+missing or whitespace-only key stops the container before Lakekeeper starts,
+with exit status `78` (`EX_CONFIG`) and a diagnostic naming the variable to
+set. The key value itself is never printed or logged.
+
+The behavior is configurable, because a silent security default in either
+direction is worse than an explicit one:
+
+| `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY` | Behavior |
+| --- | --- |
+| `true` (default) | A missing key is a startup failure. |
+| `false` | Upstream behavior: the container starts and warns. |
+
+An unrecognized value is also a startup failure, so a misspelled toggle cannot
+quietly disable the control. Informational subcommands such as `version` and
+`healthcheck` keep working without a key, so a refused container stays
+diagnosable.
+
+Two limits worth stating plainly: the guard checks that a key is **present**,
+not that it is strong or secret; and it cannot help a catalog that already ran
+without one, because credentials stored during that period were encrypted with
+the default key and adding a key later does not re-encrypt them.
+
+Full details, including the exact command allowlist and the rotation caveat,
+are in [configuration](docs/CONFIGURATION.md).
 
 ## Rootless runtime model
 
@@ -129,6 +167,8 @@ assuming it holds for a future upstream release.
 - [External artifact acquisition](docs/ARTIFACT-ACQUISITION.md) defines the
   lock, verification, and hermetic assembly contract, and states the upstream
   trust limitation.
+- [Configuration](docs/CONFIGURATION.md) documents the variables this image
+  adds, the fail-closed encryption-key guard, and what that guard does not do.
 - [Continuous integration](docs/CI.md) documents current automation, local
   checks, and the planned image assurance pipeline.
 - [Changelog](CHANGELOG.md) records notable completed changes.

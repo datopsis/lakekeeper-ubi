@@ -31,6 +31,9 @@ but container releases use the upstream-derived format documented in
 - Added a reviewed artifact lock recording the upstream release tag, archive and
   binary digests, sizes, GNU build IDs, interpreter, highest required glibc
   symbol version, and needed shared libraries for both architectures.
+- Added a configuration guide covering the variables this image adds, the
+  fail-closed encryption-key contract, the command allowlist, and the explicit
+  limits of the guard.
 - Added a hardened Compose development stack with a separate one-shot migration
   unit and no default credentials.
 - Added a restricted-runtime smoke suite that provisions its own PostgreSQL
@@ -54,10 +57,21 @@ but container releases use the upstream-derived format documented in
 
 ### Security
 
-- Recorded that upstream Lakekeeper starts with a publicly known default secret
-  encryption key when `LAKEKEEPER__PG_ENCRYPTION_KEY` is unset, warning only.
-  The behavior is asserted by the smoke suite so a change is noticed
-  deliberately, and resolving the image's failure mode is the first roadmap
-  package.
+- Made the image fail closed when the secret encryption key is unset. Upstream
+  Lakekeeper starts with a publicly known default key and only warns, so a
+  deployment can look healthy indefinitely while every stored storage
+  credential is decryptable by anyone reading public source. The container now
+  refuses to start in that state, exiting `78` (`EX_CONFIG`) with a diagnostic
+  that names the variable and never echoes its value.
+- Made that behavior configurable through `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY`,
+  which defaults to `true`. Setting it to `false` restores upstream behavior as
+  a deliberate, reviewable choice. An unrecognized value is a startup failure,
+  so a misspelled toggle cannot quietly disable the control.
+- Kept informational subcommands usable without a key, so a container the guard
+  refuses to start remains diagnosable. Any unrecognized subcommand, including
+  one added by a future upstream release, is treated as requiring the key.
+- Documented what the guard does not do: it checks presence rather than
+  strength, it cannot undo exposure from a period when no key was set, and an
+  operator who overrides the entrypoint bypasses it.
 - Recorded the `allow-all` default authorization backend and the pre-bootstrap
   window as deployment-critical operator responsibilities.

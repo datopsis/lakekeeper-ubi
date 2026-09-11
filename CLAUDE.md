@@ -26,6 +26,9 @@ Preserve these non-negotiable properties:
 - database credentials, the secret encryption key, object-store credentials,
   and identity-provider configuration are supplied by the operator at runtime
   and never baked into the image or an example;
+- the image refuses to start without a secret encryption key unless an
+  operator explicitly opts out, and the opt-out stays available and
+  documented;
 - CI produces reviewable vulnerability, SBOM, and tailored SCAP evidence;
 - release images are multi-architecture, immutable, attested, and signed;
 - documentation does not claim FIPS validation, STIG certification, or broad
@@ -55,9 +58,13 @@ must not be papered over:
   the `uuid-ossp`, `pgcrypto`, `pg_trgm`, `btree_gin`, and `btree_gist`
   extensions. Image tests need a real database fixture.
 - **The service holds secrets.** `LAKEKEEPER__PG_ENCRYPTION_KEY` protects
-  stored storage credentials. It is an operator-supplied secret with no
-  default, and it must never appear in an example, test fixture committed as a
-  production value, log line, or error message.
+  stored storage credentials. Upstream gives it a publicly known default and
+  only warns when it is unset, so this image adds a fail-closed guard in its
+  entrypoint, controlled by `LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY` and
+  documented in `docs/CONFIGURATION.md`. The key must never appear in an
+  example, a committed fixture, a log line, or an error message. Variables this
+  packaging adds use the `LAKEKEEPER_UBI_` prefix so they can never collide
+  with the upstream `LAKEKEEPER__` namespace.
 
 ## Development and verification
 
@@ -77,6 +84,8 @@ For image-affecting work, verification must cover at least:
 - the reported server version matches the locked upstream version;
 - missing or invalid required configuration fails with a useful diagnostic
   rather than starting in a degraded state;
+- the entrypoint execs, so the server runs as PID 1 and receives signals
+  directly, and no entrypoint phase changes user or group;
 - secrets do not appear in logs, error bodies, or image layers;
 - both supported architectures receive native-runtime evidence before a
   supported release.

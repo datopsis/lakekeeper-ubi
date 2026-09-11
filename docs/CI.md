@@ -90,11 +90,15 @@ architecture jobs. The implemented image pipeline performs:
    migration as a separate unit, catalog and management endpoints, log
    structure, secret non-disclosure, graceful shutdown, and actionable startup
    failures.
-5. Trivy image vulnerability scanning.
-6. SPDX inventory generation with Syft.
-7. Independent fixed High/Critical vulnerability gating with Grype and a
+5. Fail-closed guard tests covering a missing key, a whitespace-only key, an
+   unrecognized toggle value, the informational command allowlist, the
+   documented opt-out, and the requirement that the entrypoint execs so the
+   server runs as PID 1.
+6. Trivy image vulnerability scanning.
+7. SPDX inventory generation with Syft.
+8. Independent fixed High/Critical vulnerability gating with Grype and a
    retained full finding inventory.
-8. Architecture-specific artifacts and non-pull-request SARIF publication.
+9. Architecture-specific artifacts and non-pull-request SARIF publication.
 
 Tailored OpenSCAP evaluation against an ownership-preserving filesystem export
 will be inserted after the runtime tests when its profile and result semantics

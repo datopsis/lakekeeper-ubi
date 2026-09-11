@@ -100,9 +100,14 @@ LABEL org.opencontainers.image.title="Lakekeeper on Red Hat UBI 9" \
 
 COPY --from=builder /runtime/ /
 COPY --from=builder --chown=0:0 --chmod=0555 /staging/lakekeeper /usr/local/bin/lakekeeper
+COPY --chown=0:0 --chmod=0555 container/entrypoint.sh /usr/local/bin/lakekeeper-entrypoint
 
+# LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY is added by this image, not by upstream
+# Lakekeeper. It defaults to true so a deployment cannot silently fall back to
+# the publicly known default secret encryption key. See docs/CONFIGURATION.md.
 ENV LANG="C.UTF-8" \
-    TZ="UTC"
+    TZ="UTC" \
+    LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY="true"
 
 USER 999:0
 
@@ -110,10 +115,14 @@ USER 999:0
 # expected to stay on an internal network.
 EXPOSE 8181 9000
 
+# The health probe calls the binary directly rather than through the
+# entrypoint, so a health check never depends on the configuration guard.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["lakekeeper", "healthcheck", "-s"]
 
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["lakekeeper"]
+# The entrypoint validates configuration as the unprivileged runtime identity
+# and then execs the server, so Lakekeeper still runs as PID 1.
+ENTRYPOINT ["/usr/local/bin/lakekeeper-entrypoint", "lakekeeper"]
 CMD ["serve"]
