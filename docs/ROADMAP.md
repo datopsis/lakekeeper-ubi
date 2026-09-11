@@ -120,27 +120,21 @@ locking a small, reviewable set.
 
 ### 2a: take the release archive out of the build
 
-- [ ] Add `scripts/fetch-artifacts.sh`: reads `artifacts/lakekeeper.lock.json`,
-  downloads the archive for a selected architecture into an ignored staging
-  directory, and admits it only after the archive size and digest, the archive
-  member list, the extracted binary size and digest, the GNU build ID, the ELF
-  architecture, the needed shared libraries, and the highest required glibc
-  symbol version all match the lock. Re-verify an existing bundle instead of
-  re-downloading, and support `--force`.
-- [ ] Add `scripts/fetch-base-images.sh`: pull the digest-pinned UBI images so
-  assembly can run with `--pull=never`.
-- [ ] Add `scripts/build-image.sh`: re-verify the bundle, then build with
-  `--pull=never`, passing the bundle through an additional named build context
-  rather than the default context, so a stray file in the working tree cannot
-  enter the image.
-- [ ] Add `scripts/build.sh` as a thin convenience wrapper that runs the fetch
-  and build steps in order for local development. The wrapper must not be the
-  only entry point: CI runs the phases separately, and a controlled-network
-  transfer runs them on different hosts.
-- [ ] Replace the builder-stage `curl` with a `COPY` from the bundle context.
-- [ ] Add negative tests for a tampered archive, an unexpected extra archive
-  member, a wrong-architecture binary, a missing file, an unmatched lock entry,
-  and a bundle whose recorded glibc requirement exceeds the locked base.
+Implemented. The build no longer downloads the Lakekeeper binary:
+`scripts/fetch-artifacts.sh` acquires and verifies it, `scripts/verify-bundle.sh`
+re-checks it immediately before assembly, and the binary enters through a named
+build context. `tests/acquisition.sh` proves the gate rejects a tampered binary,
+a truncated binary, an extra file, a missing binary, a missing manifest, a
+bundle left over from an older lock, and a lock whose recorded ELF facts drift
+from the bytes it names. The Containerfile is checked for the absence of a
+fetch.
+
+- [ ] Fetch and verify both architectures in one place so the architecture
+  confusion case in `tests/acquisition.sh` stops being skipped. Each CI runner
+  currently fetches only its own architecture, so that case never executes.
+- [ ] Decide whether a release build should require a second, independent
+  verification of the bundle by a different implementation, rather than the same
+  script twice.
 
 ### 2b: take the RPMs out of the build
 

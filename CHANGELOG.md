@@ -55,7 +55,25 @@ but container releases use the upstream-derived format documented in
   assembly contract, and stated plainly that upstream publishes no signature or
   checksum file so recorded digests are not publisher verification.
 
+- Added separable acquisition and assembly scripts. `scripts/fetch-artifacts.sh`
+  downloads the locked release archive and admits it only after its size,
+  digest, and member list match; `scripts/verify-bundle.sh` re-checks the bundle
+  immediately before assembly; `scripts/build-image.sh` builds without pulling,
+  taking the binary from a named build context; and `scripts/build.sh` runs the
+  phases in order for local use. The phases are separable because acquisition and
+  assembly have different trust properties and, in a controlled network, run on
+  different hosts.
+- Removed the release-archive download from the container build, and added a
+  check that fails if the Containerfile regains the ability to fetch.
+- Added `tests/acquisition.sh`, which corrupts a verified bundle one way per case
+  and requires the admission gate to refuse each one, including a lock whose
+  recorded ELF facts drift from the bytes it names.
+- Documented that the secret encryption key is encryption at rest and unrelated
+  to TLS, which Lakekeeper does not terminate, along with the threat model it
+  actually addresses.
+
 ### Security
+
 
 - Made the image fail closed when the secret encryption key is unset. Upstream
   Lakekeeper starts with a publicly known default key and only warns, so a

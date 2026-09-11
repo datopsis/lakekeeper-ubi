@@ -3,6 +3,7 @@
 .pre-commit-cache
 .venv
 artifacts
+.artifact-bundle
 build
 dist
 docs

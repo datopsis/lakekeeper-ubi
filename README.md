@@ -90,7 +90,12 @@ See [the security policy](SECURITY.md) for the full statement.
 ## Secret encryption key
 
 `LAKEKEEPER__PG_ENCRYPTION_KEY` protects the storage credentials Lakekeeper
-persists in PostgreSQL.
+persists in PostgreSQL. This is encryption **at rest**, and it is unrelated to
+TLS: Lakekeeper does not terminate TLS at all. When an operator registers a
+warehouse they hand the catalog long-lived storage credentials, and this key is
+what encrypts them in the database. Its threat model is a reader of the
+database, such as a stolen backup or a read replica, which transport security
+does nothing about. See [configuration](docs/CONFIGURATION.md#this-is-encryption-at-rest-not-tls).
 
 **Upstream treats it as optional.** If it is unset, Lakekeeper starts normally,
 logs one warning, and encrypts stored credentials with a default key published
@@ -213,12 +218,34 @@ Build and exercise the current development image with rootless Podman on native
 Linux or WSL2:
 
 ```console
-podman build --format docker --file Containerfile \
-  --tag localhost/lakekeeper-ubi9:development .
+./scripts/build.sh
 CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
   bash tests/check-runtime-requirements.sh
 CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
   bash tests/smoke.sh
+```
+
+`scripts/build.sh` is a convenience wrapper over three separable phases.
+A plain `podman build .` will not work, by design: the image cannot be
+assembled from unverified inputs.
+
+```console
+./scripts/fetch-artifacts.sh     # network: download and verify against the lock
+./scripts/fetch-base-images.sh   # network: pull the digest-pinned UBI images
+./scripts/build-image.sh         # verify again, then assemble without pulling
+```
+
+They are separate because acquisition and assembly have different trust
+properties. CI runs them as distinct steps, and a controlled-network transfer
+runs acquisition on a connected host and assembly on a disconnected one. The
+bundle enters the build as a named build context, so nothing else in the working
+tree can reach the image. Verification requires `binutils` for `readelf`; it is
+not skipped when the tool is missing.
+
+To see the admission gate reject tampered inputs:
+
+```console
+bash tests/acquisition.sh
 ```
 
 The smoke suite starts its own PostgreSQL fixture, generates credentials per

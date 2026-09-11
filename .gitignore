@@ -22,6 +22,7 @@ scap-results*/
 security-results/
 
 # Downloaded upstream artifacts. Only their digests belong in this repository.
+.artifact-bundle/
 *.tar.gz
 staging/
 lakekeeper

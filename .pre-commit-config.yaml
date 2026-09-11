@@ -30,6 +30,9 @@ repos:
     rev: 745eface02aef23e168a8afb6b5737818efbea95 # v0.11.0.1
     hooks:
       - id: shellcheck
+        args:
+          # Follow sourced files so helpers in scripts/lib are analyzed too.
+          - -x
 
   - repo: https://github.com/shenxianpeng/hadolint-pre-commit
     rev: 6b998985ab8b766ed8104e4fcfeb0a4765f4c364 # v2.15.1.2

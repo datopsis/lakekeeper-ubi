@@ -1,8 +1,12 @@
 # External artifact acquisition
 
-Status: required design for the first release. The current `Containerfile`
-still downloads the locked release archive inside the builder stage and must be
-migrated to out-of-build acquisition with networking disabled during assembly.
+Status: partially implemented. The Lakekeeper binary now follows this contract:
+it is acquired and verified by `scripts/fetch-artifacts.sh`, re-verified by
+`scripts/verify-bundle.sh` immediately before assembly, and enters the build
+through a named build context. The builder stage still resolves runtime RPMs
+over the network, so assembly cannot yet run with `--network=none`. Until that
+is closed, this contract is met for the application binary and not for the
+runtime packages.
 
 ## What this project actually gets from upstream
 

@@ -106,11 +106,23 @@ are reviewed. Branch protection must not require a check until it exists on the
 default branch. Once present and proven, `image` becomes a strict, required,
 up-to-date check alongside the other repository checks.
 
+## Artifact acquisition
+
+Acquisition is a separate phase from assembly. `scripts/fetch-artifacts.sh`
+downloads the archive named by the lock and admits it only after its size,
+digest, and member list match; assembly then consumes the resulting bundle
+through a named build context and does not pull images. The `artifact lock` job
+additionally runs `tests/acquisition.sh`, which corrupts a good bundle in one
+specific way per case and requires the gate to refuse each one. A gate that has
+never been shown to reject is not evidence.
+
+The Containerfile is checked for the absence of a fetch, so the build cannot
+quietly regain the ability to download.
+
 ## Not yet implemented
 
-The current development build still downloads the locked release archive inside
-the builder stage. It does not yet meet the artifact-acquisition contract in
-[External artifact acquisition](ARTIFACT-ACQUISITION.md), which requires
-acquisition and verification to happen before assembly and assembly to run with
-networking and image pulling disabled. That migration is Package 2 in
-[the roadmap](ROADMAP.md).
+The builder stage still runs package management against the Red Hat CDN, so the
+build is not yet hermetic and cannot run with `--network=none`. Locking those
+RPMs is Package 2b in [the roadmap](ROADMAP.md). Until it lands, the
+[artifact-acquisition contract](ARTIFACT-ACQUISITION.md) is met for the
+Lakekeeper binary and not for the runtime packages.

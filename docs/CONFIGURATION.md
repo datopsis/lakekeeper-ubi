@@ -25,6 +25,34 @@ than a suppression rule that would also hide a real leaked secret.
 
 ## Secret encryption key
 
+### This is encryption at rest, not TLS
+
+Three separate things in this project involve cryptography, and mixing them up
+leads to the wrong control being configured:
+
+| Concern | Protects | Who provides it |
+| --- | --- | --- |
+| **Secrets at rest** | Storage credentials Lakekeeper persists in PostgreSQL | `LAKEKEEPER__PG_ENCRYPTION_KEY`, guarded by this image |
+| **Inbound TLS** | Connections from query engines to the catalog | Not Lakekeeper. A reverse proxy or ingress in front of it |
+| **Outbound TLS** | Connections from the catalog to object storage, identity providers, and PostgreSQL | The binary's built-in Rust TLS stack, using the trust material in the image |
+
+The encryption key has nothing to do with TLS. Lakekeeper does not terminate
+TLS, and that does not make the key less important; it makes it important for a
+different reason.
+
+When an operator registers a warehouse, they hand Lakekeeper long-lived storage
+credentials: an S3 access key, an Azure client secret, a GCS service-account
+key. Lakekeeper stores those in its PostgreSQL database so it can vend
+short-lived credentials or sign requests later. `LAKEKEEPER__PG_ENCRYPTION_KEY`
+is what encrypts them there.
+
+Its threat model is a reader of the database, not a reader of the network: a
+stolen or misplaced backup dump, a read replica on a less-controlled host, a
+database administrator outside the catalog's trust boundary, or a compromised
+PostgreSQL instance. TLS does nothing about any of those. A deployment can have
+flawless TLS everywhere and still hand over every warehouse credential the
+moment someone copies a database backup, if the key was never set.
+
 ### What upstream does
 
 `LAKEKEEPER__PG_ENCRYPTION_KEY` protects storage credentials that Lakekeeper

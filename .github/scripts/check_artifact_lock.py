@@ -29,19 +29,10 @@ def main() -> int:
     lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
     args = containerfile_args(CONTAINERFILE_PATH.read_text(encoding="utf-8"))
 
-    amd64 = lock["architectures"]["amd64"]
-    arm64 = lock["architectures"]["arm64"]
-
     expected = {
         "LAKEKEEPER_VERSION": lock["upstreamVersion"],
         "UBI_MINIMAL_IMAGE": lock["baseImages"]["builder"],
         "UBI_MICRO_IMAGE": lock["baseImages"]["runtime"],
-        "LAKEKEEPER_AMD64_URL": amd64["archive"]["url"],
-        "LAKEKEEPER_AMD64_ARCHIVE_SHA256": amd64["archive"]["sha256"],
-        "LAKEKEEPER_AMD64_BINARY_SHA256": amd64["binary"]["sha256"],
-        "LAKEKEEPER_ARM64_URL": arm64["archive"]["url"],
-        "LAKEKEEPER_ARM64_ARCHIVE_SHA256": arm64["archive"]["sha256"],
-        "LAKEKEEPER_ARM64_BINARY_SHA256": arm64["binary"]["sha256"],
     }
 
     failures = []
@@ -57,6 +48,20 @@ def main() -> int:
         failures.append(
             "upstreamReleaseTag does not match upstreamVersion: "
             f"{lock['upstreamReleaseTag']!r} vs {lock['upstreamVersion']!r}"
+        )
+
+    # Artifact acquisition happens before the build. A Containerfile that can
+    # download is a Containerfile that can consume something unreviewed, so the
+    # absence of a fetch is itself a checked property rather than a convention.
+    containerfile = CONTAINERFILE_PATH.read_text(encoding="utf-8")
+    for forbidden in ("curl ", "wget ", "https://github.com/lakekeeper"):
+        if forbidden in containerfile:
+            failures.append(
+                f"the Containerfile must not acquire artifacts, found {forbidden!r}"
+            )
+    if "COPY --from=bundle" not in containerfile:
+        failures.append(
+            "the Containerfile must take the binary from the verified bundle context"
         )
 
     # A digest recorded without its size is not a complete record.
