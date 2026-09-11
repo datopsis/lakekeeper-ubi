@@ -103,11 +103,17 @@ COPY --from=builder --chown=0:0 --chmod=0555 /staging/lakekeeper /usr/local/bin/
 COPY --chown=0:0 --chmod=0555 container/entrypoint.sh /usr/local/bin/lakekeeper-entrypoint
 
 # LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY is added by this image, not by upstream
-# Lakekeeper. It defaults to true so a deployment cannot silently fall back to
-# the publicly known default secret encryption key. See docs/CONFIGURATION.md.
+# Lakekeeper, and defaults to true so a deployment cannot silently fall back to
+# the publicly known default secret encryption key.
+#
+# The default is applied in the entrypoint rather than declared here. Declaring
+# it as ENV adds nothing at runtime, and configuration scanners reasonably flag
+# any ENV whose name looks like a credential. Suppressing that rule for this
+# file would also hide a genuinely leaked secret, and renaming the variable to
+# evade the heuristic would make it less clear to operators. See
+# docs/CONFIGURATION.md.
 ENV LANG="C.UTF-8" \
-    TZ="UTC" \
-    LAKEKEEPER_UBI_REQUIRE_ENCRYPTION_KEY="true"
+    TZ="UTC"
 
 USER 999:0
 

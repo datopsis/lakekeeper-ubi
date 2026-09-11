@@ -17,6 +17,12 @@ any capitalization. Any other value is a startup failure rather than a silent
 fallback, because a misspelled toggle must not quietly disable a security
 control.
 
+The default is applied by the entrypoint and is deliberately not declared as an
+`ENV` in the image, so `podman inspect` and `docker inspect` will not list it
+until you set it yourself. Configuration scanners flag any `ENV` whose name
+resembles a credential, and this table is a better place to record the default
+than a suppression rule that would also hide a real leaked secret.
+
 ## Secret encryption key
 
 ### What upstream does
