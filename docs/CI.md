@@ -97,7 +97,8 @@ architecture jobs. The implemented image pipeline performs:
    registration, namespace and table lifecycle, metadata written to the object
    store under the prefix the catalog reports, the storage credential
    unreadable in a full database dump, and that credential still decrypting
-   after a restart.
+   after a restart, and a real data round trip through PyIceberg whose rows
+   are read back after a catalog restart.
 6. Fail-closed guard tests covering a missing key, a whitespace-only key, an
    unrecognized toggle value, the informational command allowlist, the
    documented opt-out, and the requirement that the entrypoint execs so the

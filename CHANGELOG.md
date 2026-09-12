@@ -128,6 +128,11 @@ but container releases use the upstream-derived format documented in
   registration to fail when the object store rejects the credentials. This is
   the first evidence that the image is a working catalog rather than a server
   that answers.
+- Round-tripped real table rows through PyIceberg, an independent
+  implementation of the Iceberg specification. Rows are written, read back and
+  compared, confirmed to exist as Parquet files in the object store, and read
+  again after the catalog is restarted, which proves the commit was durable in
+  PostgreSQL rather than held in memory.
 
 ### Security
 

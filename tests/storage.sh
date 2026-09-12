@@ -15,7 +15,13 @@ runtime="${CONTAINER_RUNTIME:-podman}"
 image="${IMAGE:-localhost/lakekeeper-ubi9:development}"
 postgres_image="${POSTGRES_IMAGE:-docker.io/library/postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73}"
 seaweedfs_image="${SEAWEEDFS_IMAGE:-docker.io/chrislusf/seaweedfs:3.97@sha256:bb05d66d2963b1cc48073190781c3dd29e2c4c88a2ae2986bf58e38c86d89c6e}"
+# An independent Iceberg implementation. The catalog agreeing with itself
+# proves less than an engine written by somebody else agreeing with it.
+engine_image="${ENGINE_IMAGE:-docker.io/library/python:3.13-slim}"
+pyiceberg_version="${PYICEBERG_VERSION:-0.12.0}"
+pyarrow_version="${PYARROW_VERSION:-25.0.1}"
 
+repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 prefix="lakekeeper-ubi9-storage-${RANDOM}-$$"
 network="${prefix}-net"
 database="${prefix}-db"
@@ -263,6 +269,64 @@ echo "ok: the stored credential still decrypts and works after a restart"
 test "$(api DELETE "${catalog_path}/namespaces/qualification/tables/after_restart" \
     --output /dev/null --write-out '%{http_code}')" = "204"
 echo "ok: dropped a table"
+
+# Everything so far has spoken to the catalog's own API, which proves the
+# catalog agrees with itself. A query engine is an independent implementation
+# of the specification, and it is what an operator will actually point at this.
+#
+# The round trip crosses both stores: rows become Parquet files in object
+# storage, while the commit that makes them visible is recorded in PostgreSQL.
+# Reading them back therefore depends on both, and on them agreeing.
+# The pip command's variables expand in the engine container, not here.
+# shellcheck disable=SC2016
+run_engine() {
+    local mode="$1"
+    "${runtime}" run --rm \
+        --network "${network}" \
+        --volume "${repository_root}/tests/data:/work:ro" \
+        --env "CATALOG_URI=http://${catalog}:8181/catalog" \
+        --env "WAREHOUSE=qualification" \
+        --env "S3_ENDPOINT=http://${storage}:8333" \
+        --env "S3_ACCESS_KEY_ID=${access_key_id}" \
+        --env "S3_SECRET_ACCESS_KEY=${secret_access_key}" \
+        --env "PIP_DISABLE_PIP_VERSION_CHECK=1" \
+        --env "PIP_ROOT_USER_ACTION=ignore" \
+        --env "PYICEBERG_VERSION=${pyiceberg_version}" \
+        --env "PYARROW_VERSION=${pyarrow_version}" \
+        --env "MODE=${mode}" \
+        "${engine_image}" \
+        sh -eu -c 'pip install --quiet --no-input "pyiceberg[s3fs,pyarrow]==${PYICEBERG_VERSION}" "pyarrow==${PYARROW_VERSION}" >/dev/null && exec python /work/roundtrip.py "${MODE}"'
+}
+
+engine_output="$(run_engine write)"
+printf '%s\n' "${engine_output}"
+grep -q "rows round-tripped through PyIceberg" <<< "${engine_output}" \
+    || { echo "the engine did not round-trip rows" >&2; exit 1; }
+echo "ok: a query engine wrote and read real rows"
+
+# The rows must be Parquet files in the object store, not only a catalog answer.
+engine_data_file="$(grep -m1 '^data-file=' <<< "${engine_output}" | cut -d= -f2-)"
+test -n "${engine_data_file}" \
+    || { echo "the engine reported no data files" >&2; exit 1; }
+data_prefix="${engine_data_file#s3://"${bucket}"/}"
+data_prefix="${data_prefix%%/*}"
+data_listing="$(printf 'ls -l /buckets/%s\n' "${bucket}" | seaweed_shell || true)"
+grep -Fq "${data_prefix}" <<< "${data_listing}" \
+    || { echo "the object store has no ${data_prefix} prefix for the written rows" >&2; exit 1; }
+echo "ok: the written rows are Parquet files in the object store"
+
+# The commit lives in PostgreSQL. Restarting the catalog drops every in-memory
+# cache, so reading the same rows afterwards proves the catalog state was
+# durable in the database rather than remembered by the process.
+"${runtime}" restart "${catalog}" >/dev/null
+wait_for_catalog
+binding="$("${runtime}" port "${catalog}" 8181/tcp)"
+base_url="http://127.0.0.1:${binding##*:}"
+
+reread_output="$(run_engine read)"
+grep -q "rows round-tripped through PyIceberg" <<< "${reread_output}" \
+    || { echo "the rows did not survive a catalog restart" >&2; exit 1; }
+echo "ok: the rows survived a catalog restart, so the commit was durable in PostgreSQL"
 
 # Nothing above may have written a secret to the logs.
 catalog_logs="$("${runtime}" logs "${catalog}" 2>&1)"

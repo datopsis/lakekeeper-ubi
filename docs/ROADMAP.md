@@ -250,6 +250,22 @@ This is the first test that exercises the secret encryption key against a
 credential that exists: before it, the fail-closed guard protected a code path
 no test had used.
 
+It also round-trips real rows through PyIceberg, an independent implementation
+of the Iceberg specification, so a disagreement between this catalog and the
+specification fails in CI rather than at the first engine an operator points
+at it. Three rows are written, read back and compared, confirmed to exist as
+Parquet files in the object store, and read again after the catalog is
+restarted.
+
+**Both stores are exercised, and the restart is what proves it.** PostgreSQL
+holds catalog state: warehouses, namespaces, table registrations, the pointer
+to each table's current metadata, and the encrypted storage credentials. The
+object store holds Iceberg metadata, manifests, and the Parquet data files. A
+commit is a catalog operation recorded in PostgreSQL that publishes files
+already written to object storage, so reading rows back after a restart, which
+discards every in-memory cache, can only succeed if both stores are correct
+and agree.
+
 One behavior worth recording, because it produces a misleading error: SeaweedFS
 auto-creates a plain directory on the first PUT, and that directory is not a
 registered bucket. Its metadata lookups then fail and HEAD returns NotFound,
@@ -265,10 +281,13 @@ buckets. The bucket must be registered before the catalog ever writes to it.
   prefixes and distinct credentials, proving one cannot read the other's
   prefix. Upstream states this as a requirement, which makes it a cross-tenant
   boundary rather than a tidiness rule.
-- [ ] Write and read actual table *data*, not only metadata, through a query
-  engine such as PyIceberg or Spark. The current test proves the catalog and
-  the object store agree about metadata; it does not prove a query engine can
-  round-trip rows.
+- [ ] Pin the engine toolchain. The round trip installs PyIceberg and PyArrow
+  from PyPI at test time, so the test depends on packages that are pinned by
+  version but not by digest. That is a weaker standard than the image inputs
+  hold themselves to. It is a test dependency rather than an image input, so
+  the requirement differs, but the difference should be deliberate.
+- [ ] Add a second engine. PyIceberg agreeing does not prove Spark or Trino
+  agree, and engines differ in which parts of the specification they exercise.
 - [ ] Exercise the path over TLS, against an S3 endpoint using a certificate
   chain, which closes the gap that the image's trust bundle is still validated
   only by size and certificate count.
