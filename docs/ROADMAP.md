@@ -236,38 +236,50 @@ Two questions were settled by measurement rather than left open:
 
 ### Warehouse storage
 
-The catalog is only useful with somewhere to put tables, and this is also the
-first work that exercises the encryption key against a real stored credential.
-Until a warehouse has been registered, nothing has ever been encrypted with it.
+Qualified against SeaweedFS. `tests/storage.sh` registers a warehouse backed by
+S3-compatible storage, creates a namespace and a table, confirms the table's
+metadata was written to the object store under the exact prefix the catalog
+reports, loads the table back with its schema intact, drops it, and proves the
+stored storage credential is neither readable in a full database dump nor
+present in the logs. It then restarts the catalog and creates another table,
+which requires decrypting that credential and using it against the object
+store. Registering a warehouse with credentials the object store rejects must
+fail, so the validation is shown to validate.
 
-- [ ] Add an S3-compatible storage fixture to the test harness, using a
-  digest-pinned upstream SeaweedFS image. The fixture is a test dependency, not
-  a shipped component: Lakekeeper connects to whatever S3-compatible endpoint
-  an operator runs.
-- [ ] Prove the catalog works end to end: register a warehouse, create a
-  namespace and a table through the Iceberg REST API, write and read data, and
-  drop it. The smoke suite currently proves the server starts and answers, not
-  that the catalog functions.
-- [ ] Prove the encryption key protects something real: register a warehouse
-  with storage credentials, confirm the stored secret is not readable as
-  plaintext in PostgreSQL, and confirm the credential still works after a
-  restart, which requires a successful decrypt.
-- [ ] Determine which credential model SeaweedFS supports. STS is AWS-specific,
-  so vending short-lived credentials may be unavailable and remote signing or
-  access keys may be the only options. Qualify what actually works rather than
-  what the Iceberg specification allows.
-- [ ] Set the `s3-compat` flavor and record which S3 behaviors differ from AWS,
-  including path versus virtual-host addressing and any unsupported operations.
+This is the first test that exercises the secret encryption key against a
+credential that exists: before it, the fail-closed guard protected a code path
+no test had used.
+
+One behavior worth recording, because it produces a misleading error: SeaweedFS
+auto-creates a plain directory on the first PUT, and that directory is not a
+registered bucket. Its metadata lookups then fail and HEAD returns NotFound,
+which the catalog surfaces as a validation failure that says nothing about
+buckets. The bucket must be registered before the catalog ever writes to it.
+
+- [ ] Qualify credential vending. The current profile sets `sts-enabled: false`
+  and the catalog holds the credential itself; STS is AWS-specific and remote
+  signing is untested here. Decide which model this image documents for
+  S3-compatible storage, because they are different trust boundaries rather
+  than alternative settings.
 - [ ] Test per-warehouse credential isolation: two warehouses with distinct
-  prefixes and distinct credentials, and prove that one cannot read the other's
+  prefixes and distinct credentials, proving one cannot read the other's
   prefix. Upstream states this as a requirement, which makes it a cross-tenant
   boundary rather than a tidiness rule.
-- [ ] Exercise outbound TLS against the storage endpoint using the image's own
-  trust bundle, which closes the gap that the bundle is currently validated
-  statically by size and certificate count.
+- [ ] Write and read actual table *data*, not only metadata, through a query
+  engine such as PyIceberg or Spark. The current test proves the catalog and
+  the object store agree about metadata; it does not prove a query engine can
+  round-trip rows.
+- [ ] Exercise the path over TLS, against an S3 endpoint using a certificate
+  chain, which closes the gap that the image's trust bundle is still validated
+  only by size and certificate count.
+- [ ] Record which S3 behaviors SeaweedFS differs on, including path versus
+  virtual-host addressing, and whether any Iceberg maintenance operation needs
+  behavior it does not implement.
 - [ ] Decide whether the Datopsis SeaweedFS image replaces the upstream test
-  fixture, and when. Nothing here blocks on it: the switch belongs with the
-  same change that replaces the upstream PostgreSQL image in `compose.yaml`.
+  fixture, and when. Nothing blocks on it: the switch belongs with the same
+  change that replaces the upstream PostgreSQL image in `compose.yaml`.
+
+### Remaining runtime qualification
 
 - [ ] Qualify the minimum catalog profile: migration, server startup, health,
   management info, Iceberg REST endpoints, and graceful shutdown against a

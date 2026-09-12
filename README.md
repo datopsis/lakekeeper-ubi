@@ -262,6 +262,16 @@ To see the admission gate reject tampered inputs:
 bash tests/acquisition.sh
 ```
 
+To qualify S3-compatible warehouse storage end to end, which starts its own
+SeaweedFS and PostgreSQL fixtures and proves the catalog registers a warehouse,
+creates and reads a table, writes its metadata to object storage, and keeps the
+storage credential encrypted:
+
+```console
+CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
+  bash tests/storage.sh
+```
+
 To confirm the assembled image can actually satisfy the binary, including the
 name-resolution modules glibc loads with `dlopen` and the TLS trust bundle:
 

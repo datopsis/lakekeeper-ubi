@@ -121,7 +121,16 @@ but container releases use the upstream-derived format documented in
   be qualified against SeaweedFS. Excluding it would have produced a catalog
   that starts, reports healthy, and cannot hold a single table.
 
+- Qualified S3-compatible warehouse storage against SeaweedFS. `tests/storage.sh`
+  registers a warehouse, creates a namespace and a table, confirms the table's
+  metadata reached the object store under the exact prefix the catalog reports,
+  loads it back with its schema intact, drops it, and requires warehouse
+  registration to fail when the object store rejects the credentials. This is
+  the first evidence that the image is a working catalog rather than a server
+  that answers.
+
 ### Security
+
 
 
 
@@ -155,6 +164,11 @@ but container releases use the upstream-derived format documented in
   in the clear.
 - Recorded that audit tracing is enabled by default in practice while the
   upstream configuration reference records the default as `false`.
+- Proved the secret encryption key protects a credential that exists. A stored
+  storage credential is not readable in a full database dump or in the logs,
+  and it still decrypts after a restart, which is required to create a table
+  against the object store. Before this, the fail-closed guard protected a code
+  path no test had used.
 - Removed `openssl-libs` from the image, and with it the only High vulnerability
   finding, an unfixed OpenSSL QUIC server flaw. The binary links no TLS library,
   so OpenSSL was present only because an empty installroot resolved a full base

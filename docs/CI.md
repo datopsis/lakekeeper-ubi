@@ -93,15 +93,20 @@ architecture jobs. The implemented image pipeline performs:
    migration as a separate unit, catalog and management endpoints, log
    structure, secret non-disclosure, graceful shutdown, and actionable startup
    failures.
-5. Fail-closed guard tests covering a missing key, a whitespace-only key, an
+5. S3-compatible warehouse storage qualification against SeaweedFS: warehouse
+   registration, namespace and table lifecycle, metadata written to the object
+   store under the prefix the catalog reports, the storage credential
+   unreadable in a full database dump, and that credential still decrypting
+   after a restart.
+6. Fail-closed guard tests covering a missing key, a whitespace-only key, an
    unrecognized toggle value, the informational command allowlist, the
    documented opt-out, and the requirement that the entrypoint execs so the
    server runs as PID 1.
-6. Trivy image vulnerability scanning.
-7. SPDX inventory generation with Syft.
-8. Independent fixed High/Critical vulnerability gating with Grype and a
+7. Trivy image vulnerability scanning.
+8. SPDX inventory generation with Syft.
+9. Independent fixed High/Critical vulnerability gating with Grype and a
    retained full finding inventory.
-9. Architecture-specific artifacts and non-pull-request SARIF publication.
+10. Architecture-specific artifacts and non-pull-request SARIF publication.
 
 Tailored OpenSCAP evaluation against an ownership-preserving filesystem export
 will be inserted after the runtime tests when its profile and result semantics

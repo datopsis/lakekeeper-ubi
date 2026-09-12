@@ -225,6 +225,15 @@ jobs:
           IMAGE: ${{ env.TEST_IMAGE }}
         run: bash tests/smoke.sh
 
+      # Proves the image is a working catalog, not merely a server that
+      # answers. Also the only test that exercises the secret encryption key
+      # against a credential that exists.
+      - name: Qualify S3-compatible warehouse storage
+        env:
+          CONTAINER_RUNTIME: docker
+          IMAGE: ${{ env.TEST_IMAGE }}
+        run: bash tests/storage.sh
+
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
