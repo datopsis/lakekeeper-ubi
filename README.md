@@ -171,7 +171,10 @@ assuming it holds for a future upstream release.
 ## Project documentation
 
 - [First-release roadmap](docs/ROADMAP.md) defines outstanding work and release
-  gates. It is forward-looking; completed work belongs in the changelog and Git
+  gates, and opens with a
+  [where to resume](docs/ROADMAP.md#where-to-resume) section covering the next
+  task, the decisions that need a human, and the checks owed at every upstream
+  version bump. It is forward-looking; completed work belongs in the changelog and Git
   history.
 - [Versioning and releases](docs/VERSION.md) separates container artifact
   versions from repository-only revisions and defines the pre-1.0 upgrade

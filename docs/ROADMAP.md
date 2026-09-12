@@ -58,15 +58,22 @@ API a usable thing rather than an endpoint that answers.
 
 ## Immediate first-release sequence
 
-Work proceeds in this dependency order:
+Work proceeds in this dependency order. Completed steps stay listed so the
+order remains readable, with what closed them.
 
-1. Resolve the secret-encryption-key failure mode, because it changes the
-   image contract.
-2. Implement out-of-build artifact acquisition and network-disabled assembly
-   driven by the reviewed lock.
-3. Close the runtime test matrix: database fixtures, negative configuration
-   cases, arbitrary UID, and graceful lifecycle.
-4. Qualify the minimum catalog profile needed for the first supported image.
+1. **Done.** Resolve the secret-encryption-key failure mode. The image fails
+   closed when the key is absent or set to upstream's published default, with
+   a documented opt-out.
+2. **Done.** Out-of-build artifact acquisition and network-disabled assembly.
+   Assembly runs with `--network=none` and `--pull=never`, consuming only
+   digest-verified inputs.
+3. **Done.** The runtime test matrix: database fixtures, negative
+   configuration cases, arbitrary UID, graceful lifecycle, and runtime
+   dependency completeness.
+4. **Mostly done.** The minimum catalog profile is qualified against
+   SeaweedFS, including a real data round trip through PyIceberg. What remains
+   is under "Warehouse storage", and per-warehouse credential isolation is the
+   part that matters most.
 5. Complete the repository policy files, support boundary, threat model,
    requirement analysis, control ownership, vulnerability policy, tailored
    SCAP evidence, and deployment cyber package needed for review.
@@ -77,6 +84,69 @@ Work proceeds in this dependency order:
    verification workflow from an untagged release candidate.
 8. Freeze inputs, regenerate release-candidate evidence, approve findings,
    create the immutable tag, publish by digest, and verify the release.
+
+## Where to resume
+
+This section is the entry point for picking the work back up. It records what
+to do next and why, so that the choice does not have to be reconstructed from
+the rest of this document.
+
+### Recommended next task
+
+**Per-warehouse credential isolation**, under "Warehouse storage". Two
+warehouses with distinct prefixes and distinct credentials, proving one cannot
+read the other's prefix.
+
+It ranks first because it is a security boundary rather than a feature.
+Upstream states the requirement, the storage harness that makes it testable
+already exists, and until it is tested the project cannot say whether two
+tenants of one catalog are actually separated. Everything else outstanding in
+that area extends coverage; this one closes a boundary.
+
+### Alternatives, and why they rank lower
+
+- **Credential vending or remote signing.** A different trust model from the
+  one qualified, where the engine supplies its own credentials. Worth doing,
+  but it widens the boundary rather than verifying the current one.
+- **TLS on the storage path.** Closes the gap that the image's trust bundle is
+  validated only by size and certificate count. Small and useful.
+- **Cybersecurity control documentation.** The largest remaining body of work
+  and the one a reviewer will ask for, but it describes a boundary that is
+  still moving.
+- **Release rehearsal**, Packages 4 and 7. Premature while the product
+  boundary is still being qualified.
+
+### Decisions that need a human
+
+These are not blocked on implementation. They are choices this project should
+not make silently, and they are listed here rather than buried in a package so
+they do not get decided by whoever edits the file next.
+
+- Require a minimum length or entropy for the encryption key? Rejecting the
+  published default was unambiguous; refusing a short key is a policy choice
+  that could reject a legitimate deployment.
+- Override upstream's `LAKEKEEPER__USE_X_FORWARDED_HEADERS=true` default to
+  `false`? Correct behind a proxy, wrong when the catalog is directly
+  reachable.
+- Strip the upstream binary? Saves 41.6 MB, about 18% of the image, at the
+  cost of the shipped bytes no longer matching the bytes this project
+  verified.
+- What does a crate vulnerability finding block? They are report-only today,
+  because this project cannot patch upstream's dependencies.
+- Does the first release claim a supported storage *stack*, which would pull
+  the Datopsis SeaweedFS image into scope, or only that it works against
+  S3-compatible storage tested with SeaweedFS?
+
+### Standing obligations at every upstream version bump
+
+- Re-check the published default encryption key value, which the entrypoint
+  compares against a literal.
+- Re-measure the highest required glibc symbol version and the needed shared
+  library list against the targeted UBI major version.
+- Re-check whether the UBI Micro RPM database has drifted further from its own
+  filesystem, as it has for `tzdata`.
+- Treat a `0.x` minor increment as a qualification event, not a dependency
+  bump, because upstream is pre-1.0.
 
 ## Package 1: secret and configuration failure modes
 
