@@ -9,6 +9,7 @@ inspectable result; planned controls are not represented as passing jobs.
 | Workflow | Triggers | Current purpose |
 | --- | --- | --- |
 | `CI` | Pull requests, `main`, weekly, manual | Run pinned repository checks, audit Actions, scan configuration, verify the artifact lock, and build, test, inventory, and scan native AMD64 and ARM64 images. |
+| `Update RPM lock` | Pull requests changing the Containerfile or resolver, manual | Resolve both architectures with the pinned UBI bases and retain a proposed RPM lock and diff for review. |
 | `CodeQL` | Workflow changes, `main`, weekly, manual | Analyze GitHub Actions with the security-extended query suite. |
 | `OpenSSF Scorecard` | `main`, branch-protection changes, weekly, manual | Publish repository supply-chain findings and SARIF. |
 
@@ -38,6 +39,15 @@ configured hook types. CI separately evaluates repository files but cannot
 retroactively validate a local commit message that was never pushed.
 
 ## Artifact lock verification
+
+To refresh runtime RPMs locally, run `scripts/update-rpm-lock.sh` with Podman.
+When local containers are unavailable, the `Update RPM lock` workflow runs the
+same command on GitHub. Download its `rpm-lock-<commit>` artifact, review
+`rpm-lock.patch`, and copy the generated `artifacts/lakekeeper.lock.json` into
+the checkout. Commit the reviewed proposal and require ordinary CI on that
+commit. The workflow has read-only permissions and does not commit changes or
+provide human approval. Base pins must first match in the Containerfile and
+lock; the upstream binary and crate inventory remain independently pinned.
 
 `artifact lock` runs `.github/scripts/check_artifact_lock.py`, which fails when
 the build arguments in `Containerfile` drift from
