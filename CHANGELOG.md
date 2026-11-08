@@ -10,6 +10,8 @@ but container releases use the upstream-derived format documented in
 
 ### Fixed
 
+- Regenerated the hash-pinned CI tool requirements for the dependency updates,
+  including virtualenv's packaging dependency, while retaining filelock 3.x.
 - Refreshed the UBI 9.8 Minimal builder and Micro runtime digest pins and
   regenerated both architectures' runtime RPM locks to address fixable image
   vulnerabilities, including PCRE2, builder OpenSSL, and the CA trust store.
