@@ -12,7 +12,9 @@ but container releases use the upstream-derived format documented in
 
 - Refreshed the UBI 9.8 Minimal builder and Micro runtime digest pins and
   regenerated both architectures' runtime RPM locks to address fixable image
-  vulnerabilities, including PCRE2 and the CA trust store.
+  vulnerabilities, including PCRE2, builder OpenSSL, and the CA trust store.
+- Kept the RPM resolver stage on the host architecture when reading a foreign
+  Micro RPM database, preventing an ARM64 resolver from executing on AMD64.
 
 ### Added
 

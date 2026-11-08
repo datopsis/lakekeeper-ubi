@@ -66,10 +66,10 @@
           "sha256": "1c520b9bf7b592d936bb347a5107702e51678e160b88ecfbba6a30e35e47d24e"
         },
         {
-          "filename": "ca-certificates-2025.2.80_v9.0.305-91.el9.noarch.rpm",
-          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/c/ca-certificates-2025.2.80_v9.0.305-91.el9.noarch.rpm",
-          "sizeBytes": 1072208,
-          "sha256": "0554bf65d573950e7d550a07bf7d0b3def85ca3b45a7fbde4cce7cadd9a476a7"
+          "filename": "ca-certificates-2026.2.92_v9.0.319-90.3.el9_8.noarch.rpm",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/c/ca-certificates-2026.2.92_v9.0.319-90.3.el9_8.noarch.rpm",
+          "sizeBytes": 1071812,
+          "sha256": "5d29ecb5c3b2958308700381a119d623741d07e313d870dedfaf84e5c9df85cb"
         },
         {
           "filename": "findutils-4.8.0-7.el9.x86_64.rpm",
@@ -126,10 +126,10 @@
           "sha256": "45e246453dc9eb1bad6a71c6f349aad1b1b2e1bf3ec645b80f0ed04fe69c960e"
         },
         {
-          "filename": "tzdata-2026c-1.el9_8.noarch.rpm",
-          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/t/tzdata-2026c-1.el9_8.noarch.rpm",
-          "sizeBytes": 933286,
-          "sha256": "8d6196e02853c0900c3c2e2367665beffb62cb2d0ff5f465ea2d00848a9a35dc"
+          "filename": "tzdata-2026f-1.el9_8.noarch.rpm",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/t/tzdata-2026f-1.el9_8.noarch.rpm",
+          "sizeBytes": 936560,
+          "sha256": "dca72e34b88f487c4e0c473f156d4207f5e1187a2343e89ce28d46dc34a646aa"
         }
       ]
     },
@@ -166,10 +166,10 @@
           "sha256": "6f7c0667ac015bc0d40836c9f55c73ebf65a209069f69aa8f58e6b4655c820a8"
         },
         {
-          "filename": "ca-certificates-2025.2.80_v9.0.305-91.el9.noarch.rpm",
-          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/c/ca-certificates-2025.2.80_v9.0.305-91.el9.noarch.rpm",
-          "sizeBytes": 1072208,
-          "sha256": "0554bf65d573950e7d550a07bf7d0b3def85ca3b45a7fbde4cce7cadd9a476a7"
+          "filename": "ca-certificates-2026.2.92_v9.0.319-90.3.el9_8.noarch.rpm",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/c/ca-certificates-2026.2.92_v9.0.319-90.3.el9_8.noarch.rpm",
+          "sizeBytes": 1071812,
+          "sha256": "5d29ecb5c3b2958308700381a119d623741d07e313d870dedfaf84e5c9df85cb"
         },
         {
           "filename": "findutils-4.8.0-7.el9.aarch64.rpm",
@@ -226,10 +226,10 @@
           "sha256": "b73d314a8ef322a690bb69c49cb0dbd9a5ff18d2ba6b2973e18d2c076a52b62a"
         },
         {
-          "filename": "tzdata-2026c-1.el9_8.noarch.rpm",
-          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/t/tzdata-2026c-1.el9_8.noarch.rpm",
-          "sizeBytes": 933286,
-          "sha256": "8d6196e02853c0900c3c2e2367665beffb62cb2d0ff5f465ea2d00848a9a35dc"
+          "filename": "tzdata-2026f-1.el9_8.noarch.rpm",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/t/tzdata-2026f-1.el9_8.noarch.rpm",
+          "sizeBytes": 936560,
+          "sha256": "dca72e34b88f487c4e0c473f156d4207f5e1187a2343e89ce28d46dc34a646aa"
         }
       ]
     }
