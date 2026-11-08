@@ -1,0 +1,52 @@
+name: Update RPM lock
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Containerfile
+      - scripts/update-rpm-lock.sh
+      - scripts/lib/write_rpm_lock.py
+      - .github/workflows/update-locks.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-locks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rpm-lock:
+    name: regenerate RPM lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require consistent base pins
+        run: python3 .github/scripts/check_artifact_lock.py
+
+      - name: Resolve both architectures with Podman
+        run: bash scripts/update-rpm-lock.sh --runtime podman
+
+      - name: Validate the regenerated lock
+        run: python3 .github/scripts/check_artifact_lock.py
+
+      # This is a proposal, not an approval. A maintainer must review and commit
+      # the generated lock before ordinary CI builds consume the new packages.
+      - name: Retain the proposed lock and diff
+        run: git diff -- artifacts/lakekeeper.lock.json > rpm-lock.patch
+
+      - name: Upload lock for review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rpm-lock-${{ github.sha }}
+          path: |
+            artifacts/lakekeeper.lock.json
+            rpm-lock.patch
+          if-no-files-found: error
+          retention-days: 14

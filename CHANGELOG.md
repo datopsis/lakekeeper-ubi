@@ -8,8 +8,18 @@ but container releases use the upstream-derived format documented in
 
 ## [Unreleased]
 
+### Fixed
+
+- Refreshed the UBI 9.8 Minimal builder and Micro runtime digest pins and
+  regenerated both architectures' runtime RPM locks to address fixable image
+  vulnerabilities, including PCRE2, builder OpenSSL, and the CA trust store.
+- Kept the RPM resolver stage on the host architecture when reading a foreign
+  Micro RPM database, preventing an ARM64 resolver from executing on AMD64.
+
 ### Added
 
+- Added a read-only RPM lock update workflow that runs the existing resolver
+  for both architectures and retains its proposed lock and diff for review.
 - Added the Apache License 2.0 for Datopsis-authored work, third-party notices,
   contribution guidance, and a private vulnerability-reporting policy.
 - Added Code Owners, a security-aware pull request template, and structured
