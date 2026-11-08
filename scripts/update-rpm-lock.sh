@@ -59,6 +59,7 @@ fi
 
 minimal_image="$(lock_get baseImages.builder)"
 micro_image="$(lock_get baseImages.runtime)"
+resolver_architecture="$(host_architecture)"
 requested="$(lock_get_list runtimePackages.requested | tr '\n' ' ')"
 
 workdir="$(mktemp -d)"
@@ -84,7 +85,9 @@ for architecture in "${architectures[@]}"; do
 # this stage is executed; its files are only read.
 FROM --platform=linux/${architecture} ${micro_image} AS microbase
 
-FROM ${minimal_image} AS resolver
+# Podman can carry the preceding stage's platform into an unqualified FROM.
+# The resolver executes on the host even when the Micro database is foreign.
+FROM --platform=linux/${resolver_architecture} ${minimal_image} AS resolver
 COPY --from=microbase / /runtime
 RUN microdnf install -y dnf >/dev/null 2>&1 \
     && mkdir -p /rpms \
