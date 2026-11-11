@@ -4,8 +4,9 @@ set -Eeuo pipefail
 runtime="${CONTAINER_RUNTIME:-podman}"
 image="${IMAGE:-localhost/lakekeeper-ubi9:development}"
 expected_version="${LAKEKEEPER_VERSION:-0.13.4}"
-postgres_image="${POSTGRES_IMAGE:-docker.io/library/postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73}"
+postgres_image="${POSTGRES_IMAGE:-localhost/postgresql-lakekeeper-ubi:development}"
 
+repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 prefix="lakekeeper-ubi9-smoke-${RANDOM}-$$"
 network="${prefix}-net"
 database="${prefix}-db"
@@ -37,6 +38,9 @@ postgres_password="$(head -c 24 /dev/urandom | base64 | tr -d '=+/[:space:]')"
 encryption_key="$(head -c 24 /dev/urandom | base64 | tr -d '=+/[:space:]')"
 database_url="postgres://lakekeeper:${postgres_password}@${database}:5432/lakekeeper"
 
+# shellcheck source=tests/lib/postgresql.sh
+source "${repository_root}/tests/lib/postgresql.sh"
+
 cleanup() {
     "${runtime}" rm --force \
         "${primary}" "${arbitrary}" "${default_key}" "${missing_key}" \
@@ -44,6 +48,7 @@ cleanup() {
         "${unmigrated}" "${unreachable}" \
         "${database}" \
         >/dev/null 2>&1 || true
+    cleanup_postgres
     "${runtime}" network rm --force "${network}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -93,21 +98,6 @@ assert_process_security() {
             test "${no_new_privs}" = "1"
         done
     '
-}
-
-wait_for_database() {
-    local _
-    for _ in {1..60}; do
-        if "${runtime}" exec "${database}" \
-            pg_isready --username lakekeeper --dbname lakekeeper \
-            >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 1
-    done
-    "${runtime}" logs "${database}" >&2
-    echo "The PostgreSQL fixture never became ready" >&2
-    return 1
 }
 
 wait_for_catalog() {
@@ -176,13 +166,8 @@ test "$("${runtime}" image inspect --format '{{.Config.User}}' "${image}")" = "9
 
 "${runtime}" network create "${network}" >/dev/null
 
-"${runtime}" run --detach --name "${database}" \
-    --network "${network}" \
-    --env POSTGRES_USER=lakekeeper \
-    --env POSTGRES_DB=lakekeeper \
-    --env "POSTGRES_PASSWORD=${postgres_password}" \
-    "${postgres_image}" >/dev/null
-wait_for_database
+start_postgres
+assert_process_security "${database}"
 
 # `serve` must never migrate implicitly, so migration runs as its own unit
 # under the same restricted runtime the server uses.
@@ -194,6 +179,7 @@ wait_for_database
     --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
     --env "LAKEKEEPER__PG_ENCRYPTION_KEY=${encryption_key}" \
     "${image}" migrate >/dev/null
+assert_postgres_contract
 
 # The catalog receives no writable mount at all: the default profile must run
 # entirely on a read-only root filesystem.
@@ -349,8 +335,8 @@ wait_for_log "${default_key}" 'Using default encryption key'
 # `serve` against an unmigrated database must fail with a useful diagnostic
 # instead of starting and creating schema on demand.
 "${runtime}" exec "${database}" \
-    psql --username lakekeeper --dbname lakekeeper \
-    --command 'CREATE DATABASE unmigrated;' >/dev/null
+    psql -X --set=ON_ERROR_STOP=1 --host=/tmp --username=postgres --dbname=lakekeeper \
+    --command 'CREATE DATABASE unmigrated OWNER lakekeeper;' >/dev/null
 "${runtime}" run --detach --name "${unmigrated}" \
     --network "${network}" \
     "${readonly_runtime_args[@]}" \

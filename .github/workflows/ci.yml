@@ -219,6 +219,13 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
         run: bash tests/runtime-dependencies.sh
 
+      # No published PostgreSQL fixture exists. Its single reviewed source pin
+      # is shared with local builds; verify source, image labels and native arch.
+      - name: Build pinned PostgreSQL fixture
+        env:
+          CONTAINER_RUNTIME: docker
+        run: bash scripts/build-postgres.sh
+
       - name: Run restricted-runtime smoke tests
         env:
           CONTAINER_RUNTIME: docker

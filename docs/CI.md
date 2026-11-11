@@ -82,9 +82,19 @@ non-root UID while its Linux VM engine itself operates rootfully. That proves
 the image's non-root process behavior but does not qualify rootless-host user
 namespace behavior. Release evidence will distinguish these cases.
 
-The smoke suite creates its own network, PostgreSQL fixture, and per-run
-credentials, then removes them. It does not read a committed credential and
-does not depend on `compose.yaml`.
+Build the database first with `bash scripts/build-postgres.sh`. This uses the
+single reviewed SHA in `artifacts/postgresql-lakekeeper.commit`, invokes the
+database repository's own offline build script, and verifies source/image
+revision, RPM lock digest, and native architecture. `POSTGRES_IMAGE` overrides
+the local tag for both the wrapper and test suites.
+
+The smoke and storage suites create their own networks, hardened PostgreSQL
+fixtures, secret-file credentials and volumes, then remove them. They explicitly
+create extensions as `postgres`, migrate/serve as a separate database owner,
+and assert the five extensions and restricted role after migration. They do not
+read a committed credential or depend on `compose.yaml`. Each native CI image
+job builds the pinned database first; its dedicated step and job summary record
+the added acquisition/build/verification time.
 
 ## Image assurance
 

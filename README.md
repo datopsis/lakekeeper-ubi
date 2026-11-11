@@ -19,7 +19,9 @@ inspectable security evidence.
 - Planned image location: `ghcr.io/datopsis/lakekeeper-ubi`
 - Initial Lakekeeper version: `0.13.4`
 - Initial UBI major line: `9`
-- Required external dependency: PostgreSQL 15 or newer
+- Tested catalog database: PostgreSQL 18 from
+  [datopsis/postgresql-lakekeeper-ubi](https://github.com/datopsis/postgresql-lakekeeper-ubi)
+  (upstream Lakekeeper requires PostgreSQL 15 or newer)
 
 Lakekeeper is below version `1.0.0`. A `0.x` minor increment may introduce
 breaking API, configuration, or database-schema changes, so this project treats
@@ -236,6 +238,7 @@ Linux or WSL2:
 
 ```console
 ./scripts/build.sh
+./scripts/build-postgres.sh
 CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
   bash tests/check-runtime-requirements.sh
 CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
@@ -283,28 +286,77 @@ CONTAINER_RUNTIME=podman IMAGE=localhost/lakekeeper-ubi9:development \
   bash tests/runtime-dependencies.sh
 ```
 
-The smoke suite starts its own PostgreSQL fixture, generates credentials per
-run, exercises migration, the restricted runtime, the catalog and management
-endpoints, secret non-disclosure, and the negative startup cases, then removes
-everything it created.
+The smoke and storage suites start their own PostgreSQL 18 fixture from
+[datopsis/postgresql-lakekeeper-ubi](https://github.com/datopsis/postgresql-lakekeeper-ubi).
+There is no published image: `scripts/build-postgres.sh` fetches the exact SHA in
+[`artifacts/postgresql-lakekeeper.commit`](artifacts/postgresql-lakekeeper.commit)
+and invokes that repository's `scripts/build-offline.sh` on the native
+architecture. Updating that one-line pin is a reviewed dependency change. The
+wrapper verifies Git HEAD, the loaded image's revision label, its RPM lock digest,
+and its architecture; CI records the image ID and elapsed build time. It needs
+Git, Python 3, GnuPG, and Podman (or `CONTAINER_RUNTIME=docker`). Each native CI
+image job builds the database before either suite runs.
 
-A Compose development stack is also provided. It has not yet been exercised in
-CI or in the reference contributor environment, which has no Compose provider
-installed, so treat it as unverified until that gap is closed. The smoke suite
-above is the canonical verified path. To use it, first create a local `.env`;
-no credential has a default value:
+Both suites default `POSTGRES_IMAGE` to
+`localhost/postgresql-lakekeeper-ubi:development`. The override remains available
+for compatible builds that provide this image's paths, UID, and init contract.
+They generate separate administrator/application credentials per run and mount
+0600 secret files owned by UID 26. PostgreSQL runs as `26:0`, with a read-only
+root, dropped capabilities, `no-new-privileges`, a writable data volume and a
+restricted `/tmp`. Tests remove their containers and volumes afterwards.
+
+Provisioning explicitly runs the image's `/usr/share/lakekeeper/init.sql` as
+`postgres`, via the trusted container-local `/tmp` socket, to create `uuid-ossp`,
+`pgcrypto`, `pg_trgm`, `btree_gin`, and `btree_gist` in the `lakekeeper` database.
+[`examples/postgres-init.sql`](examples/postgres-init.sql) also creates a separate
+`lakekeeper` login and makes it the database owner. Both `migrate` and `serve`
+connect as that role over SCRAM-authenticated TCP. No superuser, CREATEDB,
+CREATEROLE, replication, BYPASSRLS, role membership, or extra grant is supplied.
+Both suites assert the exact five add-ons after migration and check that they
+remain owned by `postgres` and that the application remains only a database
+owner. The smoke suite retains its encryption-key and unmigrated-database
+negative cases; storage retains its independent PyIceberg read/write round trip.
+
+A Compose development stack is also provided. Its complete lifecycle remains
+unverified; the native CI test scripts are the canonical integration evidence.
+Build both images with the commands above first. For an isolated rootless Podman
+example, generate unique local credentials (no trailing newlines in secret
+files) and the application environment:
 
 ```console
-cat > .env <<'ENVIRONMENT'
-POSTGRES_PASSWORD=replace-with-a-unique-value
-LAKEKEEPER__PG_ENCRYPTION_KEY=replace-with-a-unique-value
-ENVIRONMENT
-podman compose up --build
+install -d -m 700 secrets
+(umask 077
+ openssl rand -hex 32 | tr -d '\n' > secrets/postgres-password
+ openssl rand -hex 32 | tr -d '\n' > secrets/lakekeeper-password
+ printf 'POSTGRES_ADMIN_PASSWORD_FILE=./secrets/postgres-password\nPOSTGRES_APP_PASSWORD_FILE=./secrets/lakekeeper-password\nPOSTGRES_PASSWORD=%s\nLAKEKEEPER__PG_ENCRYPTION_KEY=%s\n' \
+   "$(cat secrets/lakekeeper-password)" "$(openssl rand -hex 32)" > .env
+)
+chmod 0440 secrets/postgres-password secrets/lakekeeper-password
+podman compose up -d postgres
+# Run once against a fresh volume, after PostgreSQL becomes healthy:
+podman compose exec -T postgres psql -X --host=/tmp \
+  --username=postgres --dbname=lakekeeper < examples/postgres-init.sql
+podman compose up -d migrate lakekeeper
 curl --fail http://127.0.0.1:8181/health
 ```
 
-`.env` is ignored by Git. Generate both values with a password manager or
-`openssl rand -base64 32`; do not reuse an example value.
+`.env` and `secrets/` are ignored by Git. The application password in `.env`
+must match `secrets/lakekeeper-password`; it is separate from the administrator
+password. Lakekeeper still receives its database URL and encryption key as
+runtime environment values, which container inspect APIs can expose. PostgreSQL
+receives only secret-file paths. Protect both sources accordingly.
+
+Secret files inside PostgreSQL must be owned by UID 0 or 26, with mode 0400/0600,
+or mode 0440/0640 with GID 0. Rootless Podman normally maps the invoking user's
+UID/GID to container `0:0`; verify mappings on your host. For rootful Docker,
+prepare the two files as host `0:0`, mode 0440. File-backed Compose secrets can
+preserve host metadata rather than applying a requested mode. Follow the database
+image's [credential and TLS guidance](https://github.com/datopsis/postgresql-lakekeeper-ubi/blob/main/docs/CONFIGURATION.md)
+for your runtime. This example uses an isolated development network without TLS;
+it is not a production deployment or a PostgreSQL major-version upgrade path.
+Use a fresh volume: the former PostgreSQL 17 data directory cannot be reused by
+PostgreSQL 18. The init SQL deliberately refuses to recreate an existing role;
+it is explicit provisioning, not an automatic startup hook.
 
 Repository checks can be run with:
 

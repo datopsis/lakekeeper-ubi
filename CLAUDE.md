@@ -56,7 +56,13 @@ must not be papered over:
   authority to rewrite schema.
 - **PostgreSQL is a required external dependency**, version 15 or newer, with
   the `uuid-ossp`, `pgcrypto`, `pg_trgm`, `btree_gin`, and `btree_gist`
-  extensions. Image tests need a real database fixture.
+  extensions. Tests and the development example use PostgreSQL 18 from
+  `datopsis/postgresql-lakekeeper-ubi`, built locally with
+  `scripts/build-postgres.sh` from `artifacts/postgresql-lakekeeper.commit`.
+  Keep that full source SHA in one place. Use its packaged explicit init SQL
+  as the administrator; migration and serving use a separate database-owner
+  login with no superuser or extra role privileges. Preserve the database's
+  non-root, read-only, dropped-capability, secret-file runtime contract.
 - **The service holds secrets.** `LAKEKEEPER__PG_ENCRYPTION_KEY` protects
   stored storage credentials. Upstream gives it a publicly known default and
   only warns when it is unset, so this image adds a fail-closed guard in its
