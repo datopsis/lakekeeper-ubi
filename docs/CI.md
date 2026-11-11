@@ -28,6 +28,7 @@ python -m pip install --require-hashes --only-binary=:all: \
   --requirement .github/requirements/pre-commit.txt
 pre-commit install --install-hooks
 pre-commit run --all-files --show-diff-on-failure
+python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 The configured hooks check text normalization, YAML and JSON syntax, merge
@@ -103,7 +104,8 @@ The stable protected check names are `lint`, `configuration security`,
 architecture jobs. The implemented image pipeline performs:
 
 1. Trivy build-configuration scanning.
-2. Native architecture builds.
+2. Native architecture builds, followed by inspection of the loaded image's
+   source revision and artifact-lock labels against the checkout and lock.
 3. Runtime-requirement verification against the locked base image, and a
    runtime-dependency check that resolves the binary inside the assembled
    image, confirms the name-resolution modules glibc loads with `dlopen`, and
@@ -136,6 +138,20 @@ default branch. Once present and proven, `image` becomes a strict, required,
 up-to-date check alongside the other repository checks.
 
 ## Artifact acquisition
+
+`scripts/build-metadata.sh` supplies the same provenance build arguments to
+local assembly and both native CI builds. The revision is this repository's
+full checked-out commit SHA (the tested merge commit on pull requests).
+The lock digest hashes the complete raw bytes of
+`artifacts/lakekeeper.lock.json`, including both architecture entries. This
+matches Trino's shared-lock convention; PostgreSQL hashes its separate
+`artifacts/locks/<architecture>.json` file the same way.
+
+`tests/image-provenance.py` independently reads Git HEAD and hashes the lock,
+then inspects the loaded image with the container runtime. Missing, empty,
+inherited, or incorrect labels fail the job. Actual label values, image ID,
+and architecture are printed in the job log and summary. Regression tests
+exercise rejection cases and exact-byte hashing without a container engine.
 
 Acquisition is a separate phase from assembly. `scripts/fetch-artifacts.sh`
 downloads the archive named by the lock and admits it only after its size,

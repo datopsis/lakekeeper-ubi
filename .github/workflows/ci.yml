@@ -41,6 +41,9 @@ jobs:
       - name: Run repository checks
         run: pre-commit run --all-files --show-diff-on-failure
 
+      - name: Test provenance label checks
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Audit GitHub Actions security
         uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
         with:
@@ -181,6 +184,10 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
         run: bash scripts/fetch-artifacts.sh --arch "${ARCHITECTURE}"
 
+      - name: Read source and artifact-lock provenance
+        id: metadata
+        run: bash scripts/build-metadata.sh >> "${GITHUB_OUTPUT}"
+
       - name: Build test image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -188,6 +195,9 @@ jobs:
           file: Containerfile
           build-contexts: |
             bundle=.artifact-bundle/${{ matrix.architecture }}
+          build-args: |
+            SOURCE_REVISION=${{ steps.metadata.outputs.SOURCE_REVISION }}
+            LOCK_SHA256=${{ steps.metadata.outputs.LOCK_SHA256 }}
           # Build steps get no network. Every input the image receives comes
           # from the verified bundle or a digest-pinned base image.
           network: none
@@ -204,6 +214,13 @@ jobs:
         run: >-
           test "$(docker image inspect --format '{{.Architecture}}' "${TEST_IMAGE}")"
           = "${EXPECTED_ARCHITECTURE}"
+
+      - name: Verify loaded image provenance labels
+        env:
+          CONTAINER_RUNTIME: docker
+          IMAGE: ${{ env.TEST_IMAGE }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: python3 tests/image-provenance.py
 
       - name: Confirm the locked binary suits the locked base image
         env:

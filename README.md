@@ -262,6 +262,25 @@ bundle enters the build as a named build context, so nothing else in the working
 tree can reach the image. Verification requires `binutils` for `readelf`; it is
 not skipped when the tool is missing.
 
+Both local assembly and CI set `org.opencontainers.image.revision` to this
+repository's full `git rev-parse HEAD` commit SHA, overriding the UBI base's
+revision. `io.datopsis.artifact-lock.sha256` is the SHA-256 of the exact bytes
+of `artifacts/lakekeeper.lock.json` (or the selected `LOCK_FILE`). Like Trino's
+lock, this single file covers both architectures, so its digest is the same
+for AMD64 and ARM64; it is not a hash of an architecture subsection or bundle.
+Build from a Git checkout; commit image inputs before building an image whose
+revision must reproduce them. PR CI labels the tested merge commit.
+
+Inspect and verify a locally built image with:
+
+```console
+ARCHITECTURE=amd64 CONTAINER_RUNTIME=podman \
+  python3 tests/image-provenance.py
+```
+
+Use `ARCHITECTURE=arm64` on ARM64 and `IMAGE` to select a different image tag.
+The check compares the inspected labels with the checkout and selected lock.
+
 To see the admission gate reject tampered inputs:
 
 ```console

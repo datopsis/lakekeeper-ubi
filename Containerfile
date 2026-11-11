@@ -32,6 +32,8 @@ RUN rpmkeys --root /runtime --checksig /rpms/*.rpm \
 FROM ${UBI_MICRO_IMAGE}
 
 ARG LAKEKEEPER_VERSION="0.13.4"
+ARG SOURCE_REVISION
+ARG LOCK_SHA256
 
 LABEL org.opencontainers.image.title="Lakekeeper on Red Hat UBI 9" \
       org.opencontainers.image.description="A security-oriented, rootless Lakekeeper Apache Iceberg REST catalog built on Red Hat UBI 9 Micro" \
@@ -40,6 +42,8 @@ LABEL org.opencontainers.image.title="Lakekeeper on Red Hat UBI 9" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.vendor="Datopsis" \
       org.opencontainers.image.version="${LAKEKEEPER_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.datopsis.artifact-lock.sha256="${LOCK_SHA256}" \
       io.datopsis.lakekeeper.upstream-version="${LAKEKEEPER_VERSION}"
 
 COPY --from=builder /runtime/ /

@@ -10,6 +10,10 @@ but container releases use the upstream-derived format documented in
 
 ### Fixed
 
+- Set the image's own full source revision and artifact-lock SHA-256 labels in
+  local and CI builds, overriding the inherited UBI revision. Both native
+  architecture jobs now inspect and verify these labels against the checkout
+  and complete lock file, retaining the measured values in logs and summaries.
 - Regenerated the hash-pinned CI tool requirements for the dependency updates,
   including virtualenv's packaging dependency, while retaining filelock 3.x.
 - Refreshed the UBI 9.8 Minimal builder and Micro runtime digest pins and
