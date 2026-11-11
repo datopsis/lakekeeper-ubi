@@ -13,7 +13,7 @@ set -Eeuo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
 image="${IMAGE:-localhost/lakekeeper-ubi9:development}"
-postgres_image="${POSTGRES_IMAGE:-docker.io/library/postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73}"
+postgres_image="${POSTGRES_IMAGE:-localhost/postgresql-lakekeeper-ubi:development}"
 seaweedfs_image="${SEAWEEDFS_IMAGE:-docker.io/chrislusf/seaweedfs:3.97@sha256:bb05d66d2963b1cc48073190781c3dd29e2c4c88a2ae2986bf58e38c86d89c6e}"
 # An independent Iceberg implementation. The catalog agreeing with itself
 # proves less than an engine written by somebody else agreeing with it.
@@ -44,8 +44,12 @@ access_key_id="$(head -c 12 /dev/urandom | base64 | tr -d '=+/[:space:]')"
 secret_access_key="$(head -c 24 /dev/urandom | base64 | tr -d '=+/[:space:]')"
 database_url="postgres://lakekeeper:${postgres_password}@${database}:5432/lakekeeper"
 
+# shellcheck source=tests/lib/postgresql.sh
+source "${repository_root}/tests/lib/postgresql.sh"
+
 cleanup() {
     "${runtime}" rm --force "${catalog}" "${storage}" "${database}" >/dev/null 2>&1 || true
+    cleanup_postgres
     "${runtime}" network rm --force "${network}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -118,19 +122,7 @@ done
 test "${bucket_registered}" = "yes" \
     || { echo "the object store never registered the ${bucket} bucket" >&2; exit 1; }
 
-"${runtime}" run --detach --name "${database}" \
-    --network "${network}" \
-    --env POSTGRES_USER=lakekeeper \
-    --env POSTGRES_DB=lakekeeper \
-    --env "POSTGRES_PASSWORD=${postgres_password}" \
-    "${postgres_image}" >/dev/null
-for _ in {1..60}; do
-    if "${runtime}" exec "${database}" \
-        pg_isready --username lakekeeper --dbname lakekeeper >/dev/null 2>&1; then
-        break
-    fi
-    sleep 1
-done
+start_postgres
 
 "${runtime}" run --rm \
     --network "${network}" \
@@ -140,6 +132,7 @@ done
     --env "LAKEKEEPER__PG_DATABASE_URL_WRITE=${database_url}" \
     --env "LAKEKEEPER__PG_ENCRYPTION_KEY=${encryption_key}" \
     "${image}" migrate >/dev/null
+assert_postgres_contract
 
 start_catalog
 wait_for_catalog
@@ -240,7 +233,7 @@ echo "ok: the object store holds the table prefix ${storage_prefix}"
 # used rather than one table, because a secret that leaks into an audit trail or
 # an unexpected column is still a leak.
 dump="$("${runtime}" exec "${database}" \
-    pg_dump --username lakekeeper --dbname lakekeeper 2>/dev/null)"
+    pg_dump --host=/tmp --username lakekeeper --dbname lakekeeper 2>/dev/null)"
 if grep -Fq "${secret_access_key}" <<< "${dump}"; then
     echo "the storage secret is readable in plaintext in the database" >&2
     exit 1

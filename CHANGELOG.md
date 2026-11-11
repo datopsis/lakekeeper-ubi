@@ -20,6 +20,18 @@ but container releases use the upstream-derived format documented in
 
 ### Added
 
+- Switched smoke/storage fixtures and the Compose example to a locally built
+  PostgreSQL 18 `datopsis/postgresql-lakekeeper-ubi` image, using one reviewed
+  source SHA in `artifacts/postgresql-lakekeeper.commit`. Both native CI jobs
+  invoke its own build script and verify the source revision, image revision,
+  RPM lock digest, and architecture, recording build duration and image ID.
+- Hardened the database fixtures with UID 26, a read-only root, dropped
+  capabilities, no-new-privileges, and separate secret-file credentials.
+  Explicitly initialize the five extensions as `postgres` using the image's
+  packaged SQL, then migrate and serve as the `lakekeeper` database owner.
+  Both suites assert the extension set/ownership and restricted application
+  role after migration. SeaweedFS remains unchanged.
+
 - Added a read-only RPM lock update workflow that runs the existing resolver
   for both architectures and retains its proposed lock and diff for review.
 - Added the Apache License 2.0 for Datopsis-authored work, third-party notices,

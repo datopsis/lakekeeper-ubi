@@ -1,6 +1,8 @@
 # Development stack only. It exercises the image against a real PostgreSQL
 # instance; it is not a deployment pattern. No credential has a default value:
-# create a local `.env` as described in README.md before starting the stack.
+# provision secret files and a local `.env` as described in README.md.
+# Build PostgreSQL with scripts/build-postgres.sh, then explicitly provision
+# its role and extensions before starting migrate/serve.
 #
 # Compose refuses to start without the encryption key, and the image refuses
 # again at startup. The two checks are deliberate duplicates: the first gives a
@@ -23,31 +25,38 @@ x-lakekeeper-hardening: &lakekeeper-hardening
 
 services:
   postgres:
-    # Development dependency. Replace with the Datopsis postgresql-ubi image
-    # once it publishes a release; see docs/ROADMAP.md.
-    image: docker.io/library/postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    # Locally built from datopsis/postgresql-lakekeeper-ubi at the reviewed
+    # artifacts/postgresql-lakekeeper.commit pin. No registry image exists.
+    image: ${POSTGRES_IMAGE:-localhost/postgresql-lakekeeper-ubi:development}
+    user: "26:0"
     environment:
-      POSTGRES_USER: lakekeeper
+      POSTGRES_USER: postgres
       POSTGRES_DB: lakekeeper
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - postgres-password
+      - lakekeeper-password
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready --username lakekeeper --dbname lakekeeper"]
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--username=postgres", "--dbname=lakekeeper"]
       interval: 5s
       timeout: 5s
       retries: 12
       start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/pgsql
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
+    stop_signal: SIGINT
 
   # `serve` requires an already-migrated database, so migration is a separate
   # one-shot unit rather than a startup side effect of the server.
   migrate:
     image: localhost/lakekeeper-ubi9:development
-    build:
-      context: .
-      dockerfile: Containerfile
     command: ["migrate"]
     environment: *lakekeeper-environment
     depends_on:
@@ -67,6 +76,14 @@ services:
       - "127.0.0.1:8181:8181"
     stop_signal: SIGTERM
     <<: *lakekeeper-hardening
+
+# File ownership/modes are enforced by the PostgreSQL entrypoint. Compose file
+# secrets may preserve host metadata; prepare them as documented in README.md.
+secrets:
+  postgres-password:
+    file: ${POSTGRES_ADMIN_PASSWORD_FILE:?set POSTGRES_ADMIN_PASSWORD_FILE in .env}
+  lakekeeper-password:
+    file: ${POSTGRES_APP_PASSWORD_FILE:?set POSTGRES_APP_PASSWORD_FILE in .env}
 
 volumes:
   postgres-data:

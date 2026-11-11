@@ -35,7 +35,7 @@ corresponding gates.
 | Primary runtime | Qualify a documented rootless Podman version on an exact Red Hat host baseline. |
 | Docker | Retain compatibility evidence without implying the same production-support boundary as Podman. |
 | OpenShift | Test restricted-SCC arbitrary-UID operation; call it preview until an exact cluster release is qualified. |
-| Catalog backend | PostgreSQL 15 or newer only. The Vault KV v2 secrets backend is out of scope. |
+| Catalog backend | PostgreSQL 18 from `datopsis/postgresql-lakekeeper-ubi` is the integration target; upstream accepts 15 or newer. The Vault KV v2 secrets backend is out of scope. |
 | Core uses | Iceberg REST catalog API, management API, health and metrics endpoints, and database migration, all against an operator-managed PostgreSQL instance. |
 | Authorization | `allow-all` only, with the boundary stated explicitly. OpenFGA is out of scope. |
 | Authentication | Out of scope for a qualified profile; OIDC is documented as preview at most. |
@@ -364,9 +364,10 @@ buckets. The bucket must be registered before the catalog ever writes to it.
 - [ ] Record which S3 behaviors SeaweedFS differs on, including path versus
   virtual-host addressing, and whether any Iceberg maintenance operation needs
   behavior it does not implement.
-- [ ] Decide whether the Datopsis SeaweedFS image replaces the upstream test
-  fixture, and when. Nothing blocks on it: the switch belongs with the same
-  change that replaces the upstream PostgreSQL image in `compose.yaml`.
+- [ ] Qualify `datopsis/seaweedfs-ubi` as a separate fixture change. Its separated
+  master, volume, filer, and S3 roles need explicit networking, readiness,
+  writable storage, and S3 identities. Retain bucket provisioning and the
+  independent engine round trip. The PostgreSQL switch does not qualify it.
 
 ### Remaining runtime qualification
 
@@ -588,11 +589,9 @@ turn that into something an evaluator can use.
   with the operator-held key.
 - [ ] Qualify resource limits and the behavior of the catalog under connection
   exhaustion and database failover.
-- [ ] Replace the development PostgreSQL container in `compose.yaml` with the
-  Datopsis `postgresql-ubi` image once it publishes a release. Compose work is
-  deliberately last: the stack is unverified until that image exists, and
-  pinning an upstream PostgreSQL image in the meantime would create a
-  dependency this portfolio intends to replace.
+- [ ] Replace the local source-built PostgreSQL development tag with a reviewed
+  immutable digest once `datopsis/postgresql-lakekeeper-ubi` publishes an image,
+  and regenerate integration evidence. No supported database release exists yet.
 - [ ] Exercise `compose.yaml` in the reference contributor environment and in
   CI. It is currently unverified: the reference environment has no Compose
   provider installed, so the file's service ordering, credential requirements,
