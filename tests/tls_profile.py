@@ -63,6 +63,17 @@ def listeners(text):
     return sorted(result)
 
 
+def check_returned_urls(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            check_returned_urls(item)
+    elif isinstance(value, list):
+        for item in value:
+            check_returned_urls(item)
+    elif isinstance(value, str):
+        assert not value.lower().startswith('http:'), 'server returned a plaintext HTTP URL'
+
+
 class Qualification:
     def __init__(self, directory):
         self.directory = Path(directory)
@@ -160,8 +171,10 @@ class Qualification:
         if response.get('status') != expected:
             self.diagnostic(json.dumps(response))
             raise AssertionError(f'{method} {path}: expected {expected}, got {response.get("status", response.get("error"))}')
-        assert 'Location' not in response['headers'], 'unexpected redirect'
-        return json.loads(response['body']) if response['body'] else None
+        assert not any(key.lower() == 'location' for key in response['headers']), 'unexpected redirect'
+        value = json.loads(response['body']) if response['body'] else None
+        check_returned_urls(value)
+        return value
 
     def sql(self, statement):
         return self.docker('exec', '-i', self.name('postgres'), 'psql', '-XqAt',
@@ -467,6 +480,11 @@ class Qualification:
             'storage-credential': {'type': 's3', 'credential-type': 'access-key',
                                    'access-key-id': self.access, 'secret-access-key': self.secret}}, expected=201)
         self.catalog_path = '/catalog/v1/' + warehouse['warehouse-id']
+        stored_profile = self.api('GET', '/management/v1/warehouse/' + warehouse['warehouse-id'])['storage-profile']
+        assert stored_profile['endpoint'].rstrip('/') == 'https://s3:8333'
+        assert stored_profile['sts-endpoint'].rstrip('/') == 'https://s3:8333'
+        assert stored_profile['sts-enabled'] is True
+        self.record('runtime-storage-profile-uses-HTTPS-for-S3-and-STS')
         self.api('POST', self.catalog_path + '/namespaces', {'namespace': ['tls']})
         table = self.api('POST', self.catalog_path + '/namespaces/tls/tables', {
             'name': 'probe', 'schema': {'type': 'struct', 'schema-id': 0,
@@ -497,6 +515,7 @@ class Qualification:
         self.diagnostic(json.dumps(response) if response.get('status') != 200 else 'storage control OK')
         assert response.get('status') == 200, edge + ' control failed'
         value = json.loads(response['body'])
+        check_returned_urls(value)
         if edge == 's3':
             assert value['metadata']['schemas'][0]['fields'][0]['name'] == 'id'
             location = value['metadata-location']
@@ -603,7 +622,7 @@ class Qualification:
         assert self.sql("SELECT string_agg(extname, ',' ORDER BY extname) FROM pg_extension WHERE extname <> 'plpgsql';") == 'btree_gin,btree_gist,pg_trgm,pgcrypto,uuid-ossp'
         assert self.sql("SELECT NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls) FROM pg_roles WHERE rolname='lakekeeper';") == 't'
         assert self.sql("SELECT pg_get_userbyid(datdba) = 'lakekeeper' FROM pg_database WHERE datname='lakekeeper';") == 't'
-        assert self.sql("SELECT count(*) FROM pg_auth_members JOIN pg_roles ON member=oid WHERE rolname='lakekeeper';") == '0'
+        assert self.sql("SELECT count(*) FROM pg_auth_members JOIN pg_roles ON member=pg_roles.oid WHERE rolname='lakekeeper';") == '0'
         assert self.sql("SELECT bool_and(pg_get_userbyid(extowner) = 'postgres') FROM pg_extension WHERE extname <> 'plpgsql';") == 't'
         assert self.sql("SELECT string_agg(type, ',' ORDER BY rule_number) FROM pg_hba_file_rules;") == 'local,hostssl,hostssl'
         self.record('postgres-TLS-only-HBA-and-restricted-role')
