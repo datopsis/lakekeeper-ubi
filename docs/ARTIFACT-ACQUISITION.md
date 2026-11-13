@@ -44,9 +44,12 @@ identity-provider connections, not to satisfy a dynamic link.
 
 Stock UBI 9 Micro already provides every shared library in that table, so the
 runtime package set is resolved against the Micro RPM database rather than an
-empty root. That yields the genuine delta, 12 packages, instead of a duplicated
-base system of roughly three dozen. Removing the duplication also removed
-`openssl-libs` and with it the image's only High vulnerability finding.
+empty root. The resolver downloads the requested dependencies and upgrades to
+inherited Micro packages from the pinned builder's rolling UBI 9 repositories.
+The current lock contains 21 RPMs per architecture, including nine inherited
+package upgrades, rather than reinstalling the whole base. It does not add
+`openssl-libs`. The repository version can be newer than the base snapshot:
+this refresh installs Red Hat release metadata 9.9 over the pinned 9.8 base.
 
 One correction that the resolution surfaced: UBI Micro records `tzdata` as
 installed while shipping none of its 1872 files. A delta resolved purely from

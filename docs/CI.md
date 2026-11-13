@@ -14,9 +14,10 @@ inspectable result; planned controls are not represented as passing jobs.
 | `OpenSSF Scorecard` | `main`, branch-protection changes, weekly, manual | Publish repository supply-chain findings and SARIF. |
 
 Workflow permissions default to read-only. A job receives a write scope only
-when it must publish code-scanning results. The Scorecard job also receives an
-OIDC token for authenticated result publication. Third-party Actions are pinned
-to full commit SHAs and are tracked by Dependabot.
+when it must publish code-scanning results or, for the scheduled-only tracker,
+update its issue. The Scorecard job also receives an OIDC token for authenticated
+result publication. Third-party Actions are pinned to full commit SHAs and are
+tracked by Dependabot.
 
 ## Local repository checks
 
@@ -28,8 +29,12 @@ python -m pip install --require-hashes --only-binary=:all: \
   --requirement .github/requirements/pre-commit.txt
 pre-commit install --install-hooks
 pre-commit run --all-files --show-diff-on-failure
-python -m unittest discover -s tests -p 'test_*.py' -v
+/usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
+
+The policy tests require the operating system's native RPM Python bindings.
+On the Ubuntu CI runners, install `python3-rpm` and use `/usr/bin/python3` as
+above; a separate virtual environment may not expose those system bindings.
 
 The configured hooks check text normalization, YAML and JSON syntax, merge
 markers, unsafe or broken symlinks, oversized files, private keys, shell code,
