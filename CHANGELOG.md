@@ -35,6 +35,9 @@ but container releases use the upstream-derived format documented in
   its qualified TLS profile at `0ff367f`; nginx is pinned at `9ef9e82`. The isolated
   S3/STS fixture uses digest-pinned upstream SeaweedFS 4.53 while its Datopsis TLS
   qualification proceeds independently.
+- Recorded matching complete TLS manifests with 112 passing assertions per
+  native architecture, including real S3 metadata I/O and actual STS sessions.
+  PostgreSQL live pools negotiated TLS 1.3; certificate failures remained fatal.
 
 - Switched smoke/storage fixtures and the Compose example to a locally built
   PostgreSQL 18 `datopsis/postgresql-lakekeeper-ubi` image, using one reviewed

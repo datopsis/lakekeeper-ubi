@@ -169,6 +169,28 @@ is not a deployment example or evidence of completion of Phase A as a whole.
 
 ## Evidence and scope
 
+The qualification at source `e2574819b8072e86589995a20ed19bdffa401b6c`
+([CI run 43373016179](https://github.com/datopsis/lakekeeper-ubi/actions/runs/43373016179))
+passed **112 assertions on each native architecture**, including repeated fresh
+positive controls. Both manifests report `complete: true` and identical assertion
+sets; their generated root fingerprints differ.
+
+| Assertion group | amd64 | arm64 |
+| --- | --- | --- |
+| Exact nginx/PG pins, native architecture and provenance labels | PASS | PASS |
+| Verified REST over TLS 1.2/1.3; wrong root, wrong SAN and expiry rejected | PASS | PASS |
+| Complete IPv4/IPv6 listener inventory; peer refusal on 8182/9000 and old ports; loopback metrics | PASS | PASS |
+| PostgreSQL verify-full migration and serving; live pools report TLS 1.3 | PASS | PASS |
+| PostgreSQL missing/malformed/wrong CA, wrong-root leaf, wrong SAN and expiry; nonzero exit with TLS cause; plaintext refused | PASS | PASS |
+| Separate read/write URL selection, reader fallback, migration uses WRITE, URL mode precedence, root-path override | PASS | PASS |
+| S3 warehouse and metadata writes/reads; real HTTPS STS AssumeRole and use of its session credentials | PASS | PASS |
+| S3 and STS independently reject missing/wrong CA, wrong-root leaf, wrong SAN and expiry; plaintext rejected | PASS | PASS |
+| Non-root/read-only/capability-free runtime, no-new-privileges, secret separation, unchanged key guard and login policy | PASS | PASS |
+
+Retained manifests: [amd64](https://github.com/datopsis/lakekeeper-ubi/actions/runs/43373016179/artifacts/14013303248),
+[arm64](https://github.com/datopsis/lakekeeper-ubi/actions/runs/43373016179/artifacts/14013517589).
+These are development evidence, not a release or full-stack Phase A declaration.
+
 Each native `image (amd64)` and `image (arm64)` job runs `tests/tls_profile.py`
 after the existing smoke/storage regressions and the pinned proxy build.
 `tests/tls_policy.py` scans the executable Phase A surface for verification
