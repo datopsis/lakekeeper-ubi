@@ -102,10 +102,13 @@ RUN dnf upgrade -y --installroot=/runtime --releasever=9 \
         --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
         --forcearch=${rpm_architecture} --setopt=install_weak_deps=0 \
         --downloadonly --destdir=/rpms
-# Packages the Micro database already records, but whose files the image ships
-# without, must be requested explicitly or they will never be reinstalled.
+# A requested package may already have been downloaded by install/upgrade.
+# Otherwise explicitly reinstall it: Micro can retain its RPM record while
+# omitting its files. Do not attempt to reinstall an obsolete installed EVR
+# after its replacement was downloaded, or hide any failed DNF query.
 RUN for package in ${requested}; do \
-        if rpm --root /runtime -q "\${package}" >/dev/null; then \
+        rpm -qp --qf '%{NAME}\\n' /rpms/*.rpm > /tmp/downloaded-names; \
+        if ! grep -Fxq "\${package}" /tmp/downloaded-names; then \
         dnf reinstall -y --installroot=/runtime --releasever=9 \
             --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
             --forcearch=${rpm_architecture} \
