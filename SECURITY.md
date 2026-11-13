@@ -68,6 +68,48 @@ RPM build and Red Hat advisory data before classifying a match. Findings against
 the Rust dependency inventory must be reviewed against the upstream Lakekeeper
 release rather than assumed exploitable in this packaging.
 
+## Installable-fix vulnerability gate
+
+Native AMD64 and ARM64 image CI retains complete Trivy and Grype reports and
+blocks fixable HIGH/CRITICAL findings. For RPMs only, a finding is deferred when
+fresh, successful queries find no package at or above the scanner's vendor fixed
+epoch:version-release in the build's configured UBI repositories. This implements
+the owner-approved organization rule from 2026-11-12, following
+[nginx-ubi #61](https://github.com/datopsis/nginx-ubi/pull/61).
+
+The gate and `scripts/update-rpm-lock.sh` use the original repository files from
+the same digest-pinned UBI Minimal builder, releasever 9, and the target RPM
+architecture (including noarch). All three enabled UBI repositories must be
+present and populated. Fresh metadata is mandatory; skip-if-unavailable is
+disabled. Native RPM comparison includes epoch and release; lexical or semantic
+version ordering is not used. The gate checks scanner identities against the
+built image's full RPM database, including the pinned Micro base and locked delta.
+Repo-file/metadata hashes, available versions, inventory and per-finding decisions
+are retained with the raw reports in each architecture's security artifact.
+
+An available fix blocks. Query/setup errors, timeouts, missing repositories,
+invalid reports and unparsable RPM versions block. Fixable HIGH/CRITICAL non-RPM
+findings (including language modules) and HIGH/CRITICAL secrets still block;
+there are no CVE, package or date exemptions. Unfixed findings remain visible.
+A deferral is **not remediation**: the job summary names the vendor fixed
+version, and publication of that fix makes the next gate block until it is
+applied. The normal lock updater now includes upgrades to inherited Micro RPMs
+as well as the requested runtime dependencies; assembly remains offline and
+signature/digest verified.
+
+The weekly scheduled CI maintains one tracking issue and comments only when the
+deferred set changes. Issue writes cannot run on PRs, pushes or manual runs.
+Missing, duplicate or erroneous native evidence fails tracking rather than
+claiming resolution. First issue creation and later GitHub issue updates require
+a scheduled run on main; tests exercise the API behavior without writing issues.
+
+This rule applies to the existing image vulnerability gate. The separate declared
+upstream Cargo.lock inventory remains report-only, as before: it is not evidence
+of the dependencies actually compiled into the shipped binary. Its findings
+remain retained and summarized under the existing
+[artifact-acquisition boundary](docs/ARTIFACT-ACQUISITION.md). This change neither
+converts that inventory into artifact provenance nor hides its findings.
+
 ## Phase A transport boundary
 
 Lakekeeper has no native TLS listener. The [Phase A profile](docs/TLS.md) requires

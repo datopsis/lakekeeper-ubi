@@ -89,18 +89,28 @@ FROM --platform=linux/${architecture} ${micro_image} AS microbase
 # The resolver executes on the host even when the Micro database is foreign.
 FROM --platform=linux/${resolver_architecture} ${minimal_image} AS resolver
 COPY --from=microbase / /runtime
-RUN microdnf install -y dnf >/dev/null 2>&1 \
+RUN cp -a /etc/yum.repos.d /ubi-repos \
+    && microdnf install -y dnf >/dev/null 2>&1 \
     && mkdir -p /rpms \
     && dnf install -y --installroot=/runtime --releasever=9 \
+        --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
         --forcearch=${rpm_architecture} \
         --setopt=install_weak_deps=0 --downloadonly --destdir=/rpms \
         ${requested}
+# Include updates to inherited Micro RPMs, not just additional dependencies.
+RUN dnf upgrade -y --installroot=/runtime --releasever=9 \
+        --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
+        --forcearch=${rpm_architecture} --setopt=install_weak_deps=0 \
+        --downloadonly --destdir=/rpms
 # Packages the Micro database already records, but whose files the image ships
 # without, must be requested explicitly or they will never be reinstalled.
 RUN for package in ${requested}; do \
+        if rpm --root /runtime -q "\${package}" >/dev/null; then \
         dnf reinstall -y --installroot=/runtime --releasever=9 \
+            --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
             --forcearch=${rpm_architecture} \
-            --downloadonly --destdir=/rpms "\${package}" >/dev/null 2>&1 || true; \
+            --downloadonly --destdir=/rpms "\${package}"; \
+        fi; \
     done \
     && test "\$(find /rpms -name '*.rpm' | wc -l)" -ge 10
 CONTAINERFILE
@@ -121,6 +131,7 @@ CONTAINERFILE
         "localhost/lakekeeper-rpm-resolver:${architecture}" -c "
             microdnf install -y dnf >/dev/null 2>&1
             dnf repoquery --installroot=/runtime --releasever=9 \
+                --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
                 --forcearch=${rpm_architecture} --location \
                 \$(ls -1 /rpms | sed 's/\.rpm\$//') 2>/dev/null
         " | grep '^http' | sort -u > "${workdir}/urls.txt"
