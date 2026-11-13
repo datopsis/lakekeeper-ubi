@@ -107,8 +107,11 @@ class Qualification:
     def remove(self, role):
         name = self.name(role)
         if name in self.containers:
+            log = self.logs(role)
+            leaked = any(secret in log for secret in self.private_values)
             self.docker('rm', '-f', name)
             self.containers.remove(name)
+            assert not leaked, role + ': secret in logs'
 
     def start(self, role, image, command, options=(), env=None, uid=999):
         self.remove(role)
@@ -142,9 +145,18 @@ class Qualification:
                             data=json.dumps(options))
         return json.loads(value.stdout)
 
+    def loopback_client(self, **options):
+        value = self.docker('run', '--rm', '-i', '--network', 'container:' + self.name('catalog'),
+                            '--user', '999:0', '--read-only', '--cap-drop', 'ALL',
+                            '--security-opt', 'no-new-privileges:true',
+                            *self.mount(ROOT / 'tests/tls_client.py', '/probe/tls_client.py'),
+                            PYTHON, 'python', '/probe/tls_client.py', data=json.dumps(options))
+        return json.loads(value.stdout)
+
     def api(self, method, path, body=None, expected=200, **options):
         response = self.client(method=method, path=path, body=json.dumps(body) if body else '',
-                               headers={'content-type': 'application/json'}, **options)
+                               headers={'content-type': 'application/json',
+                                        'X-Iceberg-Access-Delegation': 'client-managed'}, **options)
         if response.get('status') != expected:
             self.diagnostic(json.dumps(response))
             raise AssertionError(f'{method} {path}: expected {expected}, got {response.get("status", response.get("error"))}')
@@ -282,6 +294,30 @@ class Qualification:
         self.pg_negative('wrong-ca', 'serve', env)
         self.pg_control('serve')
         self.record('separate-root-cert-overrides-URL-root-cert')
+        self.url_mode_precedence()
+        self.plaintext_pg_rejection()
+
+    def url_mode_precedence(self):
+        # Deliberately conflicting *negative* input: the verify-full URL must
+        # still reject the trusted certificate's wrong SAN despite this field.
+        for mode in ('migrate', 'serve'):
+            self.pg_control(mode)
+            env = self.environment(write=pg_url(self.password, host='alias'))
+            env['LAKEKEEPER__PG_SSL_MODE'] = 'disable'
+            self.pg_negative('wrong-san', mode, env)
+            self.pg_control(mode)
+            self.record(mode + '-URL-verify-full-overrides-separate-SSL-mode')
+
+    def plaintext_pg_rejection(self):
+        # Explicit negative probe only. No ordinary PG client selects this mode.
+        result = self.docker('run', '--rm', '--network', self.network, '--user', '26:0',
+                             '--read-only', '--cap-drop', 'ALL',
+                             '--security-opt', 'no-new-privileges:true',
+                             '--env', 'PGSSLMODE=disable', '--env', 'PGPASSWORD=' + self.password,
+                             self.pg, 'psql', '-XwAt', '-h', 'postgres', '-U', 'lakekeeper',
+                             '-d', 'lakekeeper', '-c', 'SELECT 1', check=False)
+        assert result.returncode != 0 and re.search(r'no pg_hba.conf entry.*no encryption', result.stderr)
+        self.record('postgres-plaintext-cannot-authenticate-or-query', exit=result.returncode)
 
     def inventory(self, role):
         return listeners(self.docker('exec', self.name(role), 'cat', '/proc/net/tcp', '/proc/net/tcp6').stdout)
@@ -315,6 +351,13 @@ class Qualification:
             assert self.client(action='tcp', port=port) == {'open': False, 'reason': 'refused'}
         self.api('GET', '/health')
         self.record('peer-cannot-reach-backend-metrics-or-default-ports')
+        metrics = self.loopback_client(action='plaintext', host='127.0.0.1', port=9000, path='/metrics')
+        assert metrics['status'] == 200 and 'lakekeeper' in metrics['body']
+        for port in (8182, 9000):
+            assert self.loopback_client(action='tcp', host='::1', port=port) == {'open': False, 'reason': 'refused'}
+        ipv6 = self.loopback_client(action='plaintext', host='::1', port=8181)
+        assert ipv6['status'] == 400 and 'plain HTTP request was sent to HTTPS port' in ipv6['body']
+        self.record('metrics-loopback-works-and-IPv6-cannot-bypass-TLS')
         for method, path, body in [('GET', '/health', ''), ('POST', '/management/v1/bootstrap',
                                                           '{"accept-terms-of-use":true}')]:
             reply = self.client(action='plaintext', method=method, path=path, body=body)
@@ -400,8 +443,17 @@ class Qualification:
         self.record('S3-real-warehouse-and-metadata-write-over-HTTPS', image=SEAWEED)
 
     def storage_operation(self, edge):
-        path = self.table_path + ('/credentials' if edge == 'sts' else '')
-        return self.client(path=path)
+        if edge == 'sts':
+            return self.client(path=self.table_path + '/credentials',
+                               headers={'X-Iceberg-Access-Delegation': 'vended-credentials'})
+        # A load-table response can be served from PostgreSQL alone. Creating a
+        # unique table forces a real S3 PutObject in Lakekeeper, without vending.
+        self.operation_name = 'write-' + secrets.token_hex(6)
+        body = {'name': self.operation_name, 'schema': {'type': 'struct', 'schema-id': 0,
+                'fields': [{'id': 1, 'name': 'id', 'required': True, 'type': 'long'}]}}
+        return self.client(method='POST', path=self.catalog_path + '/namespaces/tls/tables',
+                           body=json.dumps(body), headers={'content-type': 'application/json',
+                               'X-Iceberg-Access-Delegation': 'client-managed'})
 
     def storage_control(self, edge):
         self.serving()
@@ -411,6 +463,19 @@ class Qualification:
         value = json.loads(response['body'])
         if edge == 's3':
             assert value['metadata']['schemas'][0]['fields'][0]['name'] == 'id'
+            location = value['metadata-location']
+            assert location.startswith('s3://warehouse/')
+            stored = self.client(host='s3', port=8333, path='/warehouse' + urlsplit(location).path,
+                                 credentials=[self.access, self.secret, None])
+            assert stored.get('status') == 200
+            assert json.loads(stored['body'])['schemas'][0]['fields'][0]['name'] == 'id'
+            # Unregister without purge, then register from object storage: the
+            # latter forces Lakekeeper itself to GET and parse the metadata.
+            self.api('DELETE', self.catalog_path + '/namespaces/tls/tables/' + self.operation_name,
+                     expected=204)
+            registered = self.api('POST', self.catalog_path + '/namespaces/tls/register',
+                                  {'name': self.operation_name, 'metadata-location': location})
+            assert registered['metadata']['schemas'][0]['fields'][0]['name'] == 'id'
         else:
             credentials = value['storage-credentials'][0]['config']
             access = credentials['s3.access-key-id']
@@ -490,7 +555,8 @@ class Qualification:
             item = json.loads(self.docker('image', 'inspect', image).stdout)[0]
             assert item['Architecture'] == architecture
             images[image] = {'id': item['Id'], 'architecture': item['Architecture'],
-                             'revision': item['Config'].get('Labels', {}).get('org.opencontainers.image.revision')}
+                             'revision': (item['Config'].get('Labels') or {}).get('org.opencontainers.image.revision'),
+                             'lock_sha256': (item['Config'].get('Labels') or {}).get('io.datopsis.artifact-lock.sha256')}
         self.report['images'] = images
         self.start('client', PYTHON, ['python', '-c', 'import time; time.sleep(3600)'], [
             '--network', self.network, *self.mount(ROOT / 'tests/tls_client.py', '/probe/tls_client.py'),

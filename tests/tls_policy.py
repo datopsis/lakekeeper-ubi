@@ -14,7 +14,8 @@ FORBIDDEN = [
     r'verify\s*[:=]\s*["\x27]?false', r'--insecure\b', r'curl\s+-[^\s]*k',
     r'CERT_NONE', r'check_hostname\s*=\s*False', r'insecure_?skip_?verify',
     r'danger_accept_invalid_(?:certs|hostnames)', r'AWS_ALLOW_(?:HTTP|INVALID_CERTIFICATES)',
-    r'(?:proxy|grpc)_ssl_verify\s+off', r'sslmode\s*[=:]\s*(?:require|allow|prefer|disable|verify-ca)',
+    r'(?:proxy|grpc)_ssl_verify\s+off',
+    r'(?:sslmode|pg_ssl_mode)[\x27\"\]\s]*[=:][\x27\"\s]*(?:require|allow|prefer|disable|verify-ca)',
     r'_create_unverified_context', r'trust.?all',
 ]
 
@@ -22,6 +23,18 @@ FORBIDDEN = [
 def check():
     for name in FILES:
         text = (ROOT / name).read_text()
+        if name == 'tests/tls_profile.py':
+            # Two exact negative inputs, not a file/function-wide exclusion.
+            # Each must remain in its named rejection test and occur only once.
+            import ast
+            tree = ast.parse(text)
+            for function, literal in [
+                ('plaintext_pg_rejection', "'PGSSLMODE=disable'"),
+                ('url_mode_precedence', "env['LAKEKEEPER__PG_SSL_MODE'] = 'disable'")]:
+                body = next(ast.get_source_segment(text, node) for node in ast.walk(tree)
+                            if isinstance(node, ast.FunctionDef) and node.name == function)
+                assert body.count(literal) == text.count(literal) == 1
+                text = text.replace(literal, "'negative-probe'")
         for pattern in FORBIDDEN:
             assert not re.search(pattern, text, re.I), f'{name}: forbidden TLS setting {pattern}'
     # Inspect the fetched, exact upstream profile as rendered NGINX directives.

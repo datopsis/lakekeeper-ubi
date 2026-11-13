@@ -179,7 +179,9 @@ ordinary database URLs and inspects runtime hardening and listener inventories.
 public certificate fingerprints/SANs/dates and individual assertion results.
 `complete: false` is a failure, never a passing exemption. A fresh valid control
 surrounds each outbound certificate mutation. Missing and wrong roots are tested
-separately on S3 metadata reads and on the credentials endpoint's real STS path.
+separately on S3 metadata writes and on the credentials endpoint's real STS path.
+Successful S3 controls also read the stored metadata and re-register it through
+Lakekeeper, forcing the catalog to fetch it from S3.
 Wrong-root server leaves, correct-CN/wrong-SAN leaves and expired leaves are also
 tested. No private keys, credentials, raw response bodies or unsanitized logs
 are uploaded. All keys and credentials are generated per run and destroyed.
