@@ -67,3 +67,26 @@ without adopting the upstream version number a scanner expects. Review the exact
 RPM build and Red Hat advisory data before classifying a match. Findings against
 the Rust dependency inventory must be reviewed against the upstream Lakekeeper
 release rather than assumed exploitable in this packaging.
+
+## Phase A transport boundary
+
+Lakekeeper has no native TLS listener. The [Phase A profile](docs/TLS.md) requires
+REST on `127.0.0.1:8182` and metrics on `127.0.0.1:9000`, with the pinned
+`datopsis/nginx-ubi` proxy sharing only the network namespace and terminating
+verified HTTPS on 8181. Plaintext is permitted only on that namespace's loopback
+hop/metrics. A private container bridge is not this exception. PostgreSQL's
+container-local administration socket is a separate narrow provisioning exception;
+both migrations and the server connect over verified TLS, with an explicit CA.
+
+Phase A covers encryption and server identity only. Login remains off and
+OpenID is deferred to Phase B; TLS does not authorize callers or close the
+bootstrap window. Network access controls remain mandatory. The encryption-key
+guard, its documented opt-out, and the login policy are unchanged.
+
+Mount public roots separately from each listener's own private key. The catalog
+must never receive the proxy's key, and the proxy must never receive database,
+S3/STS or catalog-encryption credentials. No CA signing key belongs in a runtime
+container. S3 and actual STS AssumeRole must use verified HTTPS with the custom
+root loaded before process startup. Qualification evidence is scoped to the
+exact client paths and native architecture recorded in the CI TLS manifest;
+it does not qualify the whole Seaweed control plane or the full integration stack.

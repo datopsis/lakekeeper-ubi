@@ -93,6 +93,12 @@ the rest of this document.
 
 ### Recommended next task
 
+Phase A dispatch item 4 now has a dedicated [TLS qualification](TLS.md), with
+individual native-CI evidence for the proxy boundary, PostgreSQL URLs, S3 and
+STS. This is development evidence only; full integration TLS, restart/crash
+behavior and Seaweed inter-service identity remain with their owning dispatch
+items. Login stays off; OpenID is Phase B. The encryption-key policy is unchanged.
+
 **Per-warehouse credential isolation**, under "Warehouse storage". Two
 warehouses with distinct prefixes and distinct credentials, proving one cannot
 read the other's prefix.
@@ -108,8 +114,8 @@ that area extends coverage; this one closes a boundary.
 - **Credential vending or remote signing.** A different trust model from the
   one qualified, where the engine supplies its own credentials. Worth doing,
   but it widens the boundary rather than verifying the current one.
-- **TLS on the storage path.** Closes the gap that the image's trust bundle is
-  validated only by size and certificate count. Small and useful.
+- **TLS integration.** Carry the focused client qualification into the complete
+  Phase A stack, including recovery and the parallel Seaweed TLS profile.
 - **Cybersecurity control documentation.** The largest remaining body of work
   and the one a reviewer will ask for, but it describes a boundary that is
   still moving.
@@ -419,6 +425,8 @@ holds 146 certificates. These remain open:
   (`LAKEKEEPER__PG_DATABASE_URL_READ` alongside `..._WRITE`), which upstream
   recommends for production so writes reach the primary and reads spread across
   replicas. The image and smoke suite currently exercise only the write URL.
+  Phase A tests selection and CA failures for both pools against one primary;
+  actual replication/failover remains unqualified.
 - [ ] Document and test connection-pool sizing
   (`LAKEKEEPER__PG_READ_POOL_CONNECTIONS`, `LAKEKEEPER__PG_WRITE_POOL_CONNECTIONS`)
   and the pool-exhaustion signal, `lakekeeper_catalog_pg_pool_acquire_timeouts_total`.

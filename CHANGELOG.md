@@ -24,6 +24,18 @@ but container releases use the upstream-derived format documented in
 
 ### Added
 
+- Added a focused Phase A TLS qualification to both native image jobs: the pinned
+  nginx-ubi proxy profile, loopback REST/metrics isolation, PostgreSQL verify-full
+  migration/server checks and URL precedence, and S3 plus real STS AssumeRole
+  with per-run private roots and certificate rejection tests. Each job retains a
+  sanitized assertion manifest. Existing hardening, key guard, login policy and
+  functional/security gates remain unchanged.
+- Documented proxy deployment, per-role CA/key mounts, outbound URL settings and
+  the narrow loopback/Unix-socket exceptions. Updated the database fixture pin to
+  its qualified TLS profile at `0ff367f`; nginx is pinned at `9ef9e82`. The isolated
+  S3/STS fixture uses digest-pinned upstream SeaweedFS 4.53 while its Datopsis TLS
+  qualification proceeds independently.
+
 - Switched smoke/storage fixtures and the Compose example to a locally built
   PostgreSQL 18 `datopsis/postgresql-lakekeeper-ubi` image, using one reviewed
   source SHA in `artifacts/postgresql-lakekeeper.commit`. Both native CI jobs
