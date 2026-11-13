@@ -131,6 +131,15 @@ architecture jobs. The implemented image pipeline performs:
    retained full finding inventory.
 10. Architecture-specific artifacts and non-pull-request SARIF publication.
 
+Both image jobs additionally build nginx at `artifacts/nginx.commit` through its
+own native Podman script, verify provenance after loading into Docker, and run
+the [Phase A TLS qualification](TLS.md). PostgreSQL uses the single existing
+source pin, now its TLS-profile revision. Every outbound negative uses the real
+Lakekeeper process and must report a TLS-specific cause. The sanitized
+`tls-<commit>-<architecture>` manifest records each assertion, certificates and
+image identities. A failed or incomplete matrix fails the existing aggregate
+`image` gate; no new permissions or branch-protection change is needed.
+
 Tailored OpenSCAP evaluation against an ownership-preserving filesystem export
 will be inserted after the runtime tests when its profile and result semantics
 are reviewed. Branch protection must not require a check until it exists on the

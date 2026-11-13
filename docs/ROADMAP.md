@@ -93,6 +93,12 @@ the rest of this document.
 
 ### Recommended next task
 
+Phase A dispatch item 4 now has a dedicated [TLS qualification](TLS.md), with
+individual native-CI evidence for the proxy boundary, PostgreSQL URLs, S3 and
+STS. This is development evidence only; full integration TLS, restart/crash
+behavior and Seaweed inter-service identity remain with their owning dispatch
+items. Login stays off; OpenID is Phase B. The encryption-key policy is unchanged.
+
 **Per-warehouse credential isolation**, under "Warehouse storage". Two
 warehouses with distinct prefixes and distinct credentials, proving one cannot
 read the other's prefix.
@@ -108,8 +114,8 @@ that area extends coverage; this one closes a boundary.
 - **Credential vending or remote signing.** A different trust model from the
   one qualified, where the engine supplies its own credentials. Worth doing,
   but it widens the boundary rather than verifying the current one.
-- **TLS on the storage path.** Closes the gap that the image's trust bundle is
-  validated only by size and certificate count. Small and useful.
+- **TLS integration.** Carry the focused client qualification into the complete
+  Phase A stack, including recovery and the parallel Seaweed TLS profile.
 - **Cybersecurity control documentation.** The largest remaining body of work
   and the one a reviewer will ask for, but it describes a boundary that is
   still moving.
@@ -358,9 +364,10 @@ buckets. The bucket must be registered before the catalog ever writes to it.
   the requirement differs, but the difference should be deliberate.
 - [ ] Add a second engine. PyIceberg agreeing does not prove Spark or Trino
   agree, and engines differ in which parts of the specification they exercise.
-- [ ] Exercise the path over TLS, against an S3 endpoint using a certificate
-  chain, which closes the gap that the image's trust bundle is still validated
-  only by size and certificate count.
+- [x] Exercise S3 and actual STS AssumeRole over verified HTTPS with a per-run
+  custom root. Both native architectures pass the independent trust-failure
+  matrices; see [Phase A evidence](TLS.md#evidence-and-scope). This does not
+  qualify Seaweed's full internal TLS profile or change integration credential mode.
 - [ ] Record which S3 behaviors SeaweedFS differs on, including path versus
   virtual-host addressing, and whether any Iceberg maintenance operation needs
   behavior it does not implement.
@@ -399,10 +406,10 @@ missing: all five needed libraries resolve, NSS is complete, and the bundle
 holds 146 certificates. These remain open:
 
 - [ ] Exercise outbound TLS against a real endpoint using the image's own trust
-  bundle. The bundle is currently validated statically, by size and certificate
-  count, which would not catch a bundle that parses but does not chain. The
-  natural vehicle is the S3-compatible storage profile, so this is coupled to
-  that work rather than worth a synthetic harness now.
+  bundle. The shipped public root bundle is still validated statically. The
+  Phase A qualification now exercises explicit private roots against real
+  PostgreSQL, S3 and STS endpoints on both architectures; a public-CA endpoint
+  using only the shipped bundle remains a separate qualification.
 - [ ] Exercise the paths that only appear under real use: a warehouse
   registration that stores and retrieves an encrypted credential, a table
   create and read through a query engine, and a task-queue run. The smoke suite
@@ -419,6 +426,8 @@ holds 146 certificates. These remain open:
   (`LAKEKEEPER__PG_DATABASE_URL_READ` alongside `..._WRITE`), which upstream
   recommends for production so writes reach the primary and reads spread across
   replicas. The image and smoke suite currently exercise only the write URL.
+  Phase A tests selection and CA failures for both pools against one primary;
+  actual replication/failover remains unqualified.
 - [ ] Document and test connection-pool sizing
   (`LAKEKEEPER__PG_READ_POOL_CONNECTIONS`, `LAKEKEEPER__PG_WRITE_POOL_CONNECTIONS`)
   and the pool-exhaustion signal, `lakekeeper_catalog_pg_pool_acquire_timeouts_total`.
@@ -426,6 +435,9 @@ holds 146 certificates. These remain open:
   `0.0.0.0` by default, so port 9000 is exposed on every interface unless an
   operator restricts it. Decide whether this image changes that default,
   document the exposure, and test `/metrics` on port 9000.
+  Phase A qualifies the explicit loopback-only override and a working local
+  `/metrics`, with peer/IPv6 rejection. Changing image-wide defaults or exposing
+  metrics through a monitoring ingress remains outside that profile.
 - [ ] Document the exact `/health` contract for probes: it returns 503 only when
   PostgreSQL is unreachable, and deliberately **not** when a role provider is
   down, so a provider outage keeps serving from cached roles. A reader who

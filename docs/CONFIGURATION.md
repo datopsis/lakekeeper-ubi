@@ -257,6 +257,12 @@ entrypoint, so a health probe never depends on the configuration guard.
 
 ## Upstream configuration
 
+For the Phase A deployment settings, CA mount paths, URL precedence and loopback
+proxy exception, see [TLS configuration and qualification](TLS.md). In particular,
+every supplied PostgreSQL URL needs its own `sslmode=verify-full` and explicit
+`sslrootcert`; the separate SSL mode does not override URL parsing, while the
+separate root certificate setting does override the URL's CA path.
+
 For the `LAKEKEEPER__*` variables themselves, including database connection
 settings, the metrics port, authentication, and storage profiles, see
 [the upstream configuration reference](https://docs.lakekeeper.io/docs/latest/configuration/).

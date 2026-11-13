@@ -21,6 +21,8 @@ Thumbs.db
 grype*.json
 scap-results*/
 security-results/
+.tls-fixture/
+tls-report.json
 
 # Downloaded upstream artifacts. Only their digests belong in this repository.
 .artifact-bundle/

@@ -186,6 +186,12 @@ assuming it holds for a future upstream release.
   trust limitation.
 - [Configuration](docs/CONFIGURATION.md) documents the variables this image
   adds, the fail-closed encryption-key guard, and what that guard does not do.
+- [Phase A TLS](docs/TLS.md) deploys the catalog on loopback behind the pinned
+  nginx proxy, with verified PostgreSQL, S3 and STS connections and explicit CA
+  mounts. Login stays off; OpenID belongs to Phase B. Native CI retains each TLS
+  assertion separately from the existing plaintext regression tests.
+  The [qualification record](docs/TLS.md#evidence-and-scope) contains 112 passing
+  assertions on each native architecture, with exact CI and artifact links.
 - [Hermetic build](docs/HERMETIC-BUILD.md) describes the network-free assembly
   property, its security value, and the controls it does and does not support.
 - [FIPS analysis](docs/FIPS.md) records why this image cannot support a FIPS
