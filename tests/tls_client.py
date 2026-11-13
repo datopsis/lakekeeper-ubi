@@ -4,6 +4,7 @@ The plaintext action is exclusively a rejection probe. It cannot follow redirect
 Credentials and response bodies go only to the harness's private capture pipe.
 """
 import datetime
+import gzip
 import hashlib
 import hmac
 import http.client
@@ -57,12 +58,21 @@ def request(options):
         assert action == 'https'
         context = ssl.create_default_context(cafile=options.get('ca', '/trust/trusted.crt'))
         assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
+        if version := options.get('tls_version'):
+            assert version in ('TLSv1_2', 'TLSv1_3')
+            context.minimum_version = context.maximum_version = getattr(ssl.TLSVersion, version)
         connection = http.client.HTTPSConnection(host, port, context=context, timeout=40)
     try:
         connection.request(method, path, body=body, headers=headers)
+        protocol = connection.sock.version() if action == 'https' else None
         response = connection.getresponse()
-        return {'status': response.status, 'body': response.read().decode(),
-                'headers': dict(response.getheaders())}
+        payload = response.read()
+        # Iceberg stores gzip-compressed metadata objects; transport verification
+        # and the exact parsed schema assertion remain mandatory.
+        if payload.startswith(b'\x1f\x8b'):
+            payload = gzip.decompress(payload)
+        return {'status': response.status, 'body': payload.decode(),
+                'headers': dict(response.getheaders()), 'tls': protocol}
     finally:
         connection.close()
 

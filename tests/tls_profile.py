@@ -221,13 +221,18 @@ class Qualification:
         self.lakekeeper(env=env)
         self.wait(lambda: self.docker('exec', self.name('catalog'), 'lakekeeper', 'healthcheck', '-s',
                                      check=False).returncode == 0, 'catalog')
+        self.start_proxy()
+        self.wait(lambda: self.client().get('status') == 200, 'verified HTTPS proxy')
+        info = self.api('GET', '/management/v1/info')
+        assert info['lakekeeper-version'] == json.loads((ROOT / 'artifacts/lakekeeper.lock.json').read_text())['upstreamVersion']
+
+    def start_proxy(self, leaf='catalog'):
         self.start('proxy', self.proxy, ['-c', '/profile/nginx.conf', '-g', 'daemon off;'], [
             '--network', 'container:' + self.name('catalog'),
             '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
             *self.mount(ROOT / '.tls-fixture/nginx.conf', '/profile/nginx.conf'),
-            *self.mount(self.directory / 'catalog', '/etc/nginx/tls')], uid=10001)
-        self.wait(lambda: self.client().get('status') == 200, 'verified HTTPS proxy')
-        self.api('GET', '/management/v1/info')
+            *self.mount(self.directory / leaf, '/etc/nginx/tls')], uid=10001)
+        self.wait(lambda: self.client(action='tcp').get('open'), 'proxy listener')
 
     def pg_control(self, mode, env=None):
         if mode == 'migrate':
@@ -335,6 +340,13 @@ class Qualification:
         if role == 'catalog':
             assert all(not mount['RW'] for mount in obj['Mounts'])
             assert not any('OPENID' in item or 'REQUIRE_ENCRYPTION_KEY=' in item for item in obj['Config']['Env'])
+            env = dict(item.split('=', 1) for item in obj['Config']['Env'])
+            assert env['LAKEKEEPER__BIND_IP'] == '127.0.0.1'
+            assert env['LAKEKEEPER__LISTEN_PORT'] == '8182'
+            assert env['LAKEKEEPER__METRICS_PORT'] == '9000'
+            for key in ('LAKEKEEPER__PG_DATABASE_URL_READ', 'LAKEKEEPER__PG_DATABASE_URL_WRITE'):
+                if key in env:
+                    validate_pg_url(env[key])
         self.record(role + '-hardened')
 
     def ingress(self):
@@ -367,6 +379,20 @@ class Qualification:
         assert wrong.get('error') == 'SSLCertVerificationError'
         self.api('GET', '/health')
         self.record('ingress-verifies-custom-CA')
+        for version in ('TLSv1_2', 'TLSv1_3'):
+            reply = self.client(tls_version=version)
+            assert reply['status'] == 200 and reply['tls'] == version.replace('_', '.')
+            assert json.loads(reply['body'])['health'] == 'ok'
+            self.record('ingress-' + reply['tls'], health='ok')
+        for case in ('wrong-root', 'wrong-san', 'expired'):
+            self.api('GET', '/health')
+            self.start_proxy('catalog-' + case)
+            reply = self.client()
+            assert reply.get('error') == 'SSLCertVerificationError'
+            assert re.search(TLS_ERRORS[case], reply['detail'], re.I), reply['detail']
+            self.record('ingress-' + case, error=reply['error'])
+            self.start_proxy()
+            self.api('GET', '/health')
         assert self.docker('exec', self.name('catalog'), 'sh', '-c',
                            'test ! -e /etc/nginx/tls/server.key').returncode == 0
         assert self.docker('exec', self.name('proxy'), 'sh', '-c',
@@ -377,9 +403,19 @@ class Qualification:
         assert proxy['HostConfig']['NetworkMode'] in ('container:' + self.name('catalog'), 'container:' + catalog_id)
         assert self.docker('exec', self.name('catalog'), 'readlink', '/proc/self/ns/net').stdout == self.docker('exec', self.name('proxy'), 'readlink', '/proc/self/ns/net').stdout
         self.record('shared-network-separate-secret-mounts')
+        assert self.docker('exec', self.name('catalog'), 'cat', '/proc/1/comm').stdout.strip() == 'lakekeeper'
+        # The unchanged smoke suite tests all key-guard branches; repeat the
+        # default missing-key refusal within the hardened TLS fixture as well.
+        missing = self.docker('run', '--rm', '--network', 'none', '--read-only',
+                              '--user', '999:0', '--cap-drop', 'ALL', '--security-opt',
+                              'no-new-privileges:true', self.image, 'serve', check=False)
+        assert missing.returncode == 78 and 'LAKEKEEPER__PG_ENCRYPTION_KEY' in missing.stderr
+        self.record('encryption-key-default-guard-and-login-policy-unchanged', missing_key_exit=78)
 
     def start_s3(self, leaf='s3-valid'):
-        self.start('s3', SEAWEED, ['-v=2', 's3', '-filer=127.0.0.1:8888',
+        # Broad V(2) logs access-key mappings. Limit diagnostics to the STS
+        # handler, whose caller/role/session-name log contains no credentials.
+        self.start('s3', SEAWEED, ['-vmodule=s3api_sts=2', 's3', '-filer=127.0.0.1:8888',
                                   '-ip.bind=0.0.0.0', '-port=8333', '-port.iceberg=0', '-port.lance=0',
                                   '-config=/config/s3.json', '-iam.config=/config/iam.json',
                                   '-iam.readOnly=true', '-cert.file=/run/tls/server.crt',
@@ -537,6 +573,7 @@ class Qualification:
             if path.is_dir() and path.name != 'authority':
                 shutil.move(path, self.directory / path.name)
         for name in ('valid', 'wrong-root', 'wrong-san', 'expired', 'catalog',
+                     'catalog-wrong-root', 'catalog-wrong-san', 'catalog-expired',
                      's3-valid', 's3-wrong-root', 's3-wrong-san', 's3-expired', 'client'):
             self.protect(self.directory / name)
         config = self.directory / 'pg-secrets'
@@ -565,6 +602,9 @@ class Qualification:
         self.sql((ROOT / 'examples/postgres-init.sql').read_text())
         assert self.sql("SELECT string_agg(extname, ',' ORDER BY extname) FROM pg_extension WHERE extname <> 'plpgsql';") == 'btree_gin,btree_gist,pg_trgm,pgcrypto,uuid-ossp'
         assert self.sql("SELECT NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls) FROM pg_roles WHERE rolname='lakekeeper';") == 't'
+        assert self.sql("SELECT pg_get_userbyid(datdba) = 'lakekeeper' FROM pg_database WHERE datname='lakekeeper';") == 't'
+        assert self.sql("SELECT count(*) FROM pg_auth_members JOIN pg_roles ON member=oid WHERE rolname='lakekeeper';") == '0'
+        assert self.sql("SELECT bool_and(pg_get_userbyid(extowner) = 'postgres') FROM pg_extension WHERE extname <> 'plpgsql';") == 't'
         assert self.sql("SELECT string_agg(type, ',' ORDER BY rule_number) FROM pg_hba_file_rules;") == 'local,hostssl,hostssl'
         self.record('postgres-TLS-only-HBA-and-restricted-role')
 

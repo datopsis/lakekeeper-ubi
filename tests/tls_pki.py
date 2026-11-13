@@ -57,7 +57,9 @@ subjectKeyIdentifier = hash
                 '-startdate', stamp(minutes=-5), '-enddate', stamp(hours=24),
                 '-in', stem.with_suffix('.csr'), '-out', stem.with_suffix('.crt'), '-notext')
 
-    inventory = {}
+    inventory = {root: openssl('x509', '-in', authority / f'{root}.crt', '-noout',
+                               '-fingerprint', '-sha256', '-serial', '-dates', '-subject')
+                 for root in ('trusted', 'unrelated')}
     cases = [('valid', 'trusted', 'postgres', 'postgres', -5, 6),
              ('rotated', 'trusted', 'postgres', 'postgres', -5, 6),
              ('wrong-root', 'unrelated', 'postgres', 'postgres', -5, 6),
@@ -71,6 +73,11 @@ subjectKeyIdentifier = hash
                   ('wrong-root', 'unrelated', 's3', -5, 6),
                   ('wrong-san', 'trusted', 'wrong.invalid', -5, 6),
                   ('expired', 'trusted', 's3', -120, -1))]
+    cases += [(f'catalog-{name}', root, 'catalog', san, start, end)
+              for name, root, san, start, end in (
+                  ('wrong-root', 'unrelated', 'catalog', -5, 6),
+                  ('wrong-san', 'trusted', 'wrong.invalid', -5, 6),
+                  ('expired', 'trusted', 'catalog', -120, -1))]
     for name, root, cn, san, start_minutes, end_hours in cases:
         target = directory / name
         target.mkdir()
