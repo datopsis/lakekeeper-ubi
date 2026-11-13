@@ -19,6 +19,7 @@ Thumbs.db
 *.sarif
 *.spdx.json
 grype*.json
+trivy*.json
 scap-results*/
 security-results/
 .tls-fixture/

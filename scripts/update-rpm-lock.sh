@@ -89,18 +89,31 @@ FROM --platform=linux/${architecture} ${micro_image} AS microbase
 # The resolver executes on the host even when the Micro database is foreign.
 FROM --platform=linux/${resolver_architecture} ${minimal_image} AS resolver
 COPY --from=microbase / /runtime
-RUN microdnf install -y dnf >/dev/null 2>&1 \
+RUN cp -a /etc/yum.repos.d /ubi-repos \
+    && microdnf install -y dnf >/dev/null 2>&1 \
     && mkdir -p /rpms \
     && dnf install -y --installroot=/runtime --releasever=9 \
+        --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
         --forcearch=${rpm_architecture} \
         --setopt=install_weak_deps=0 --downloadonly --destdir=/rpms \
         ${requested}
-# Packages the Micro database already records, but whose files the image ships
-# without, must be requested explicitly or they will never be reinstalled.
+# Include updates to inherited Micro RPMs, not just additional dependencies.
+RUN dnf upgrade -y --installroot=/runtime --releasever=9 \
+        --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
+        --forcearch=${rpm_architecture} --setopt=install_weak_deps=0 \
+        --downloadonly --destdir=/rpms
+# A requested package may already have been downloaded by install/upgrade.
+# Otherwise explicitly reinstall it: Micro can retain its RPM record while
+# omitting its files. Do not attempt to reinstall an obsolete installed EVR
+# after its replacement was downloaded, or hide any failed DNF query.
 RUN for package in ${requested}; do \
+        rpm -qp --qf '%{NAME}\\n' /rpms/*.rpm > /tmp/downloaded-names; \
+        if ! grep -Fxq "\${package}" /tmp/downloaded-names; then \
         dnf reinstall -y --installroot=/runtime --releasever=9 \
+            --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
             --forcearch=${rpm_architecture} \
-            --downloadonly --destdir=/rpms "\${package}" >/dev/null 2>&1 || true; \
+            --downloadonly --destdir=/rpms "\${package}"; \
+        fi; \
     done \
     && test "\$(find /rpms -name '*.rpm' | wc -l)" -ge 10
 CONTAINERFILE
@@ -121,6 +134,7 @@ CONTAINERFILE
         "localhost/lakekeeper-rpm-resolver:${architecture}" -c "
             microdnf install -y dnf >/dev/null 2>&1
             dnf repoquery --installroot=/runtime --releasever=9 \
+                --setopt=reposdir=/ubi-repos --setopt=*.skip_if_unavailable=False --refresh \
                 --forcearch=${rpm_architecture} --location \
                 \$(ls -1 /rpms | sed 's/\.rpm\$//') 2>/dev/null
         " | grep '^http' | sort -u > "${workdir}/urls.txt"

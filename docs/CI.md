@@ -14,9 +14,10 @@ inspectable result; planned controls are not represented as passing jobs.
 | `OpenSSF Scorecard` | `main`, branch-protection changes, weekly, manual | Publish repository supply-chain findings and SARIF. |
 
 Workflow permissions default to read-only. A job receives a write scope only
-when it must publish code-scanning results. The Scorecard job also receives an
-OIDC token for authenticated result publication. Third-party Actions are pinned
-to full commit SHAs and are tracked by Dependabot.
+when it must publish code-scanning results or, for the scheduled-only tracker,
+update its issue. The Scorecard job also receives an OIDC token for authenticated
+result publication. Third-party Actions are pinned to full commit SHAs and are
+tracked by Dependabot.
 
 ## Local repository checks
 
@@ -28,8 +29,12 @@ python -m pip install --require-hashes --only-binary=:all: \
   --requirement .github/requirements/pre-commit.txt
 pre-commit install --install-hooks
 pre-commit run --all-files --show-diff-on-failure
-python -m unittest discover -s tests -p 'test_*.py' -v
+/usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
+
+The policy tests require the operating system's native RPM Python bindings.
+On the Ubuntu CI runners, install `python3-rpm` and use `/usr/bin/python3` as
+above; a separate virtual environment may not expose those system bindings.
 
 The configured hooks check text normalization, YAML and JSON syntax, merge
 markers, unsafe or broken symlinks, oversized files, private keys, shell code,
@@ -125,11 +130,22 @@ architecture jobs. The implemented image pipeline performs:
    unrecognized toggle value, the informational command allowlist, the
    documented opt-out, and the requirement that the entrypoint execs so the
    server runs as PID 1.
-7. Trivy image vulnerability scanning.
+7. Full Trivy image vulnerability and secret scanning.
 8. SPDX inventory generation with Syft.
-9. Independent fixed High/Critical vulnerability gating with Grype and a
-   retained full finding inventory.
+9. Full Grype scanning of the Syft SBOM. Both scanners independently feed the
+   [installable-fix gate](../SECURITY.md#installable-fix-vulnerability-gate):
+   fixable High/Critical findings block unless fresh native UBI queries prove
+   the vendor RPM fix is not available. Non-RPM fixes and query errors block.
+   Raw reports, full image RPM inventory and repository metadata hashes are
+   retained; deferred fixes appear in the job summary with the vendor version.
 10. Architecture-specific artifacts and non-pull-request SARIF publication.
+
+Only scheduled main-branch CI maintains the single deferred-fix tracking issue;
+it comments only when that set changes. PRs never write tracking issues. Native
+RPM ordering and fail-closed policy tests run on both image runners. The normal
+lock-update workflow refreshes the requested dependencies and inherited Micro
+RPMs using the same pinned builder's repository files; it retains a proposed
+lock for review without modifying Git.
 
 Both image jobs additionally build nginx at `artifacts/nginx.commit` through its
 own native Podman script, verify provenance after loading into Docker, and run

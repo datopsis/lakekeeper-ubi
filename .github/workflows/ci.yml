@@ -41,8 +41,11 @@ jobs:
       - name: Run repository checks
         run: pre-commit run --all-files --show-diff-on-failure
 
-      - name: Test provenance label checks
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Install native RPM comparison bindings
+        run: sudo apt-get update && sudo apt-get install -y python3-rpm
+
+      - name: Test repository policy and provenance checks
+        run: /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Audit GitHub Actions security
         uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
@@ -163,6 +166,7 @@ jobs:
       SBOM_FILE: lakekeeper-ubi9-${{ matrix.architecture }}.spdx.json
       GRYPE_SARIF: grype-${{ matrix.architecture }}.sarif
       GRYPE_ALL: grype-all-${{ matrix.architecture }}.json
+      TRIVY_ALL: trivy-all-${{ matrix.architecture }}.json
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -176,6 +180,12 @@ jobs:
         env:
           EXPECTED_MACHINE: ${{ matrix.machine }}
         run: test "$(uname -m)" = "${EXPECTED_MACHINE}"
+
+      - name: Test native RPM ordering and fail-closed policy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-rpm
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_ubi_vulnerability_gate.py' -v
 
       # Acquisition is a separate phase from assembly. It runs here, before the
       # build, and admits the archive only if it matches the reviewed lock.
@@ -281,10 +291,11 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.TEST_IMAGE }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
+          format: json
+          output: ${{ env.TRIVY_ALL }}
+          exit-code: "0"
+          ignore-unfixed: false
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 
       - name: Generate SPDX SBOM with Syft
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -296,7 +307,8 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
 
-      - name: Scan Syft SBOM with Grype
+      # Scanners must succeed; the gate below evaluates their unfiltered reports.
+      - name: Record Grype SARIF
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           sbom: ${{ env.SBOM_FILE }}
@@ -304,7 +316,7 @@ jobs:
           output-file: ${{ env.GRYPE_SARIF }}
           severity-cutoff: high
           only-fixed: true
-          fail-build: true
+          fail-build: false
           cache-db: true
           grype-version: v0.118.0
 
@@ -321,6 +333,12 @@ jobs:
           cache-db: true
           grype-version: v0.118.0
 
+      - name: Gate fixes against the native UBI repositories
+        if: ${{ always() }}
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: bash scripts/run-vulnerability-gate.sh "${ARCHITECTURE}"
+
       - name: Retain image security artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -330,7 +348,9 @@ jobs:
             ${{ env.SBOM_FILE }}
             ${{ env.GRYPE_SARIF }}
             ${{ env.GRYPE_ALL }}
-          if-no-files-found: warn
+            ${{ env.TRIVY_ALL }}
+            security-results/
+          if-no-files-found: error
           retention-days: 14
 
       - name: Publish Grype findings to code scanning
@@ -351,3 +371,36 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.image.result }}
         run: test "${MATRIX_RESULT}" = success
+
+  ubi-fix-notification:
+    name: track deferred UBI fixes
+    needs: image
+    if: ${{ always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    concurrency:
+      group: ubi-deferred-fix-tracker
+      cancel-in-progress: false
+    steps:
+      - name: Check out trusted scheduled code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download this run's native reports
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: >-
+          gh run download "${RUN_ID}" --repo "${REPOSITORY}"
+          --pattern 'image-security-*' --dir /tmp/ubi-gate-reports
+
+      - name: Maintain one issue; comment only when the deferred set changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/track_deferred_fixes.py /tmp/ubi-gate-reports

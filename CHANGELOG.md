@@ -10,6 +10,18 @@ but container releases use the upstream-derived format documented in
 
 ### Fixed
 
+- Gate fixable HIGH/CRITICAL RPM findings on fresh, native UBI repository
+  availability using RPM epoch/version/release comparison. Unpublished vendor
+  fixes are reported as deferred; available fixes, query failures and fixable
+  non-RPM findings remain blocking, without exemption lists. Retain complete
+  Trivy/Grype reports and repository evidence, and track deferred-set changes
+  in one scheduled issue. Preserve all required job names.
+- Include updates to inherited UBI Micro RPMs in the normal two-architecture
+  lock resolver, using the same pinned builder repository configuration as the
+  vulnerability gate. Regenerated both locks with ten package upgrades per
+  architecture, including glibc, libgcc, coreutils and tzdata, from the current
+  rolling UBI 9 repositories; the locked base digests and Lakekeeper binary
+  remain unchanged.
 - Set the image's own full source revision and artifact-lock SHA-256 labels in
   local and CI builds, overriding the inherited UBI revision. Both native
   architecture jobs now inspect and verify these labels against the checkout
