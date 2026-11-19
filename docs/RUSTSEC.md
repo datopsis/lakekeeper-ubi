@@ -128,5 +128,12 @@ and any unresolved failures are recorded in the PR. Both new binaries were
 measured to require at most glibc 2.34 and the unchanged libc/libm/libresolv/
 libgcc_s/loader set. The published default encryption key is unchanged in source;
 CI retains the existing guard, hardening, provenance, smoke, S3 and TLS tests.
+Source review found a pre-existing guard limitation: upstream's
+`DEFAULT_ENCRYPTION_KEY` includes surrounding angle brackets, whereas this
+repository's `UPSTREAM_DEFAULT_KEY` literal does not. The guard's known-value
+comparison therefore does not cover that exact upstream literal. Its missing-key
+check remains in place. This PR leaves the guard/tests unchanged as requested;
+this finding requires follow-up and must not be represented as qualified
+rejection of upstream's exact default.
 The older TLS qualification record remains historical 0.13.4 evidence, not
 qualification of 0.13.9.
