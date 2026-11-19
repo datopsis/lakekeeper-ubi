@@ -15,8 +15,25 @@ IDs, exact source archive/Cargo.lock and `nightly-2026-06-28`. Neither ELF has a
 cargo-auditable `.dep-v0` section. Recorded hashes establish reviewed bytes,
 not independent publisher identity or reproducible binary provenance.
 
-**RustSec count: pending the native PR CI evaluation; not yet a clean result.**
-The final report will replace this statement with counts and artifact links.
+**0.15.1 has 22 RustSec findings on both native architectures:** 6
+vulnerabilities + 16 advisory warnings; 8 build-only/unselected findings are
+separate. It is not clean and still ships quick-xml 0.40.1 with both
+RUSTSEC-2026-0194/-0195. Against 0.13.9, the thrift/pin-utils/lru matches disappear,
+but humantime RUSTSEC-2026-0542 appears and the Arrow advisory persists.
+
+| Release | Compiled packages amd64 / arm64 | RustSec findings per architecture | Other lock findings |
+| --- | --- | --- | --- |
+| 0.13.4 | 517 / 516 | 38, plus one yanked crate | 17 |
+| 0.13.9 | 501 / 500 | 24 (7 vulnerabilities + 17 warnings) | 9 |
+| 0.15.1 | 531 / 530 | 22 (6 vulnerabilities + 16 warnings) | 8 |
+
+[Native evaluation run 44462926522](https://github.com/datopsis/lakekeeper-ubi/actions/runs/44462926522)
+(head `7d2891f7e2249c8e4f8da70963a3705714d62c90`) retained
+[amd64](https://github.com/datopsis/lakekeeper-ubi/actions/runs/44462926522/artifacts/14501880537)
+and [arm64](https://github.com/datopsis/lakekeeper-ubi/actions/runs/44462926522/artifacts/14501367882)
+artifacts. Read `security-results/rustsec-evaluation-0.15.1/` for raw JSON,
+classified inventories, graph and evidence. All comparison scans used RustSec DB
+`472a4c9a785030434f15d7da84964d60fbe789ab`; no advisory ignores or CVE-only filters.
 The separate evaluation step uses the same pinned prebuilt cargo-audit and
 exact-release Cargo unit-graph selection as the shipped-code gate, without
 compiling Rust or executing build scripts. It audits the downloaded 0.15.1
@@ -25,11 +42,11 @@ report-only because this binary is not shipped; errors producing evidence fail
 the step. The ordinary 0.13.9 shipped-code gate remains independently blocking.
 No advisory ignores are imported. Full-lock/build-only findings are separate.
 
-Comparison reference: 0.13.4 has **38 RustSec findings plus one yanked crate**;
-0.13.9 has **24 RustSec findings** (7 vulnerabilities + 17 advisory warnings),
-with 9 build-only/unselected findings. Counts include advisory warning classes;
-CVE-only counts are not comparable. The direct signer uses quick-xml 0.41, but
-Azure's 0.40.1 copy must be checked separately, not assumed fixed by a minor bump.
+Counts include advisory warning classes; CVE-only counts are not comparable.
+The direct signer uses quick-xml 0.41; the Azure fork's separate 0.40.1 copy
+remains compiled. Static ELF checks find max glibc 2.34 and only libc/libm/
+libgcc_s/loader dependencies on both targets. This fits the UBI 9 ABI boundary,
+but is not runtime qualification of the candidate.
 
 ## Breaking changes versus 0.13
 
