@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
 image="${IMAGE:-localhost/lakekeeper-ubi9:development}"
-expected_version="${LAKEKEEPER_VERSION:-0.13.4}"
+expected_version="${LAKEKEEPER_VERSION:-0.13.9}"
 postgres_image="${POSTGRES_IMAGE:-localhost/postgresql-lakekeeper-ubi:development}"
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
