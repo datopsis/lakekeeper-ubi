@@ -13,12 +13,29 @@ import tarfile
 import tempfile
 import tomllib
 import urllib.request
+import urllib.parse
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(args, **kwargs):
-    return subprocess.run(args, check=True, text=True, **kwargs)
+    try:
+        return subprocess.run(args, check=True, text=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        if kwargs.get("capture_output"):
+            print(error.stdout or "")
+            print(error.stderr or "")
+        raise
+
+
+def canonical_source(source):
+    # Cargo.lock escapes '/' in git tag queries; metadata can leave it literal.
+    # Normalize only the query encoding, preserving repository and commit SHA.
+    if source and source.startswith("git+"):
+        url = urllib.parse.urlsplit(source)
+        query = urllib.parse.urlencode(urllib.parse.parse_qsl(url.query, strict_parsing=True))
+        return urllib.parse.urlunsplit(url._replace(query=query))
+    return source
 
 
 def verified_download(url, digest, destination):
@@ -58,7 +75,7 @@ def runtime_packages(graph, metadata):
         if unit["mode"] != "build":
             raise ValueError(f"Unexpected runtime compilation mode: {unit['mode']}")
         package = packages[unit["pkg_id"]]  # Missing identities fail closed.
-        selected.add((package["name"], package["version"], package["source"]))
+        selected.add((package["name"], package["version"], canonical_source(package["source"])))
         pending.extend(d["index"] for d in unit["dependencies"])
     if len(selected) < 2:
         raise ValueError("Empty or incomplete runtime dependency graph")
@@ -69,7 +86,7 @@ def partition_lock(lock, selected):
     shipped, other = [], []
     remaining = set(selected)
     for package in lock["package"]:
-        key = (package["name"], package["version"], package.get("source"))
+        key = (package["name"], package["version"], canonical_source(package.get("source")))
         (shipped if key in selected else other).append(package)
         remaining.discard(key)
     if remaining:

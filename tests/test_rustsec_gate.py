@@ -52,6 +52,12 @@ class RustSecClassificationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             gate.partition_lock({"package": []}, {("xml", "1.0.0", None)})
 
+    def test_git_tag_query_encoding_preserves_commit_identity(self):
+        raw = "git+https://example.test/nats?tag=async-nats/v1#abc123"
+        encoded = "git+https://example.test/nats?tag=async-nats%2Fv1#abc123"
+        self.assertEqual(gate.canonical_source(raw), encoded)
+        self.assertNotEqual(gate.canonical_source(raw), encoded.replace("abc123", "def456"))
+
 
 if __name__ == "__main__":
     unittest.main()
