@@ -12,6 +12,8 @@ but container releases use the upstream-derived format documented in
 
 - Updated the locked Lakekeeper release to 0.13.9 on both architectures,
   preserving exact-byte acquisition, runtime hardening and all existing gates.
+- Added a report-only 0.15.1 evaluation with pinned candidate audit inputs;
+  the shipped version remains 0.13.9.
 - Added a checksum-pinned prebuilt cargo-audit gate for the release build's
   shipped crate graph. RustSec findings without CVE aliases block; build-only
   and unselected findings are separately retained. Known quick-xml 0.40.1

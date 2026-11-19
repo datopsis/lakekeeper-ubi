@@ -129,24 +129,38 @@ def audit(tool, inventory, database, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("architecture", choices=("amd64", "arm64"))
-    parser.add_argument("--historical-baseline", action="store_true")
+    subject = parser.add_mutually_exclusive_group()
+    subject.add_argument("--historical-baseline", action="store_true")
+    subject.add_argument("--evaluate-0151", action="store_true",
+                         help="Report on the pinned unshipped 0.15.1 candidate; never change admission")
     args = parser.parse_args()
-    lock_name = ("rustsec-historical-baseline.lock.json" if args.historical_baseline
-                 else "lakekeeper.lock.json")
-    lock = json.loads((ROOT / "artifacts" / lock_name).read_text())
+    report_only = args.historical_baseline or args.evaluate_0151
+    if args.evaluate_0151:
+        lock_path = ROOT / "docs/evals/lakekeeper-0.15.1.lock.json"
+        output_name = "rustsec-evaluation-0.15.1"
+        title = "unshipped 0.15.1 evaluation (report-only)"
+    elif args.historical_baseline:
+        lock_path = ROOT / "artifacts/rustsec-historical-baseline.lock.json"
+        output_name = "rustsec-historical"
+        title = "historical 0.13.4 evidence"
+    else:
+        lock_path = ROOT / "artifacts/lakekeeper.lock.json"
+        output_name = "rustsec"
+        title = "shipped-code gate"
+    lock = json.loads(lock_path.read_text())
     policy = lock["rustsec"]
     entry = lock["architectures"][args.architecture]
     target = entry["rustTarget"]
-    output = ROOT / "security-results" / ("rustsec-historical" if args.historical_baseline else "rustsec")
+    output = ROOT / "security-results" / output_name
     output.mkdir(parents=True, exist_ok=True)
     binary = ROOT / ".artifact-bundle" / args.architecture / "lakekeeper"
-    if args.historical_baseline:
-        # Historical evidence is never used to admit the new release.
-        archive = output / "historical.tgz"
+    if report_only:
+        # Historical/evaluation evidence never admits the shipped release.
+        archive = output / "subject.tgz"
         verified_download(entry["archive"]["url"], entry["archive"]["sha256"], archive)
         with tarfile.open(archive) as tar:
             if tar.getnames() != ["lakekeeper"]:
-                raise ValueError("Unexpected historical archive members")
+                raise ValueError("Unexpected report subject archive members")
             tar.extractall(output, filter="data")
         archive.unlink()
         binary = output / "lakekeeper"
@@ -154,7 +168,7 @@ def main():
         raise ValueError("The audited artifact differs from the shipped binary")
     sections = run(["readelf", "-SW", str(binary)], capture_output=True).stdout
     (output / "elf-sections.txt").write_text(sections)
-    if args.historical_baseline:
+    if report_only:
         binary.unlink()
     if ".dep-v0" in sections:
         raise ValueError("Embedded cargo-auditable data is now available; audit it directly")
@@ -200,6 +214,7 @@ def main():
         run(["git", "clone", "--depth", "1", "https://github.com/RustSec/advisory-db.git", str(database)])
         database_sha = run(["git", "-C", str(database), "rev-parse", "HEAD"], capture_output=True).stdout.strip()
         evidence = dict(architecture=args.architecture, target=target,
+                        admissionBlocking=not report_only, subject=title,
                         upstreamCommit=lock["upstreamReleaseCommit"],
                         binarySha256=entry["binary"]["sha256"],
                         sourceArchiveSha256=policy["sourceArchiveSha256"],
@@ -214,11 +229,13 @@ def main():
         excluded = audit(tool, output / "build-only-or-unselected.Cargo.lock", database,
                          output / "build-only-or-unselected.json")
         blocking = audit(tool, output / "shipped.Cargo.lock", database, output / "shipped.json")
-        lines = ["## RustSec " + ("historical 0.13.4 evidence" if args.historical_baseline else "shipped-code gate"), "",
-                 f"Shipped: {len(shipped)} packages, **{len(blocking)} blocking findings**.",
+        lines = ["## RustSec " + title, "",
+                 f"Subject runtime: {len(shipped)} packages, **{len(blocking)} findings** "
+                 + ("(report-only; subject is not admitted by this scan)." if report_only
+                    else "(blocking for the shipped binary)."),
                  f"Build-only or unselected: {len(other)} packages, {len(excluded)} report-only findings.",
                  f"Database: `{database_sha}`. No ignore lists; all advisory severities and warnings block shipped code.", ""]
-        for label, findings in (("BLOCK", blocking), ("REPORT", excluded)):
+        for label, findings in ((("REPORT" if report_only else "BLOCK"), blocking), ("REPORT", excluded)):
             for finding in findings:
                 package, advisory = finding["package"], finding.get("advisory")
                 lines.append(f"- {label}: {package['name']} {package['version']} "
@@ -229,7 +246,7 @@ def main():
         if os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
                 handle.write(summary)
-        return 0 if args.historical_baseline else int(bool(blocking))
+        return 0 if report_only else int(bool(blocking))
 
 
 if __name__ == "__main__":

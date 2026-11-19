@@ -3,6 +3,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import subprocess
+import sys
 
 SPEC = importlib.util.spec_from_file_location(
     "rustsec_gate", Path(__file__).resolve().parents[1] / "scripts/rustsec_gate.py"
@@ -51,6 +53,15 @@ class RustSecClassificationTest(unittest.TestCase):
         self.assertEqual(other, packages[:1])
         with self.assertRaises(ValueError):
             gate.partition_lock({"package": []}, {("xml", "1.0.0", None)})
+
+    def test_candidate_and_historical_modes_cannot_be_combined(self):
+        result = subprocess.run(
+            [sys.executable, str(Path(gate.__file__)), "amd64",
+             "--historical-baseline", "--evaluate-0151"],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("not allowed with argument", result.stderr)
 
     def test_git_tag_query_encoding_preserves_commit_identity(self):
         raw = "git+https://example.test/nats?tag=async-nats/v1#abc123"

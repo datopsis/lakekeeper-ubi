@@ -137,3 +137,11 @@ this finding requires follow-up and must not be represented as qualified
 rejection of upstream's exact default.
 The older TLS qualification record remains historical 0.13.4 evidence, not
 qualification of 0.13.9.
+
+## Separate 0.15.1 evaluation
+
+The report under [docs/evals](evals/lakekeeper-0.15.1.md) concerns an unshipped
+candidate, not a version upgrade. The explicit `--evaluate-0151` mode uses a
+separate pinned manifest and report directory. Its findings are report-only;
+errors still fail the step. The default shipped 0.13.9 gate is unchanged and
+remains blocking with no ignores. Candidate evidence cannot admit image bytes.
