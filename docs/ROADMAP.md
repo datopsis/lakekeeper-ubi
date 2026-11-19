@@ -137,6 +137,8 @@ they do not get decided by whoever edits the file next.
 - Strip the upstream binary? Saves 41.6 MB, about 18% of the image, at the
   cost of the shipped bytes no longer matching the bytes this project
   verified.
+- What does a crate vulnerability finding block? They are report-only today,
+  because this project cannot patch upstream's dependencies.
 - Does the first release claim a supported storage *stack*, which would pull
   the Datopsis SeaweedFS image into scope, or only that it works against
   S3-compatible storage tested with SeaweedFS?
@@ -279,10 +281,14 @@ Two questions were settled by measurement rather than left open:
   substitute, and it over-reports, because feature flags exclude crates that
   still appear in the lockfile.
 
-The shipped-code RustSec policy and exact release-build selection are now
-implemented; see [method and evidence](RUSTSEC.md). Full declared-lock scans
-remain report-only. No ignore list is used for shipped code.
-
+- [ ] Define the triage policy for crate findings. They are report-only today,
+  because this project cannot patch upstream's dependencies and blocking on
+  them would tie every release to upstream's schedule. Decide what does block a
+  release, what gets reported upstream, and how an accepted finding expires.
+- [ ] Decide whether the inventory's over-reporting is acceptable for review,
+  or whether to narrow it by resolving the feature set upstream actually
+  builds. A source build would answer this precisely and is the same decision
+  as the FIPS and publisher-verification questions.
 - [ ] Ask upstream to publish either artifact attestations or a `cargo auditable`
   build. Both would replace a declared inventory with a derived one. Record the
   request and its outcome so the limitation has a history.

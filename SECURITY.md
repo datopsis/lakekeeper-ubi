@@ -132,11 +132,3 @@ container. S3 and actual STS AssumeRole must use verified HTTPS with the custom
 root loaded before process startup. Qualification evidence is scoped to the
 exact client paths and native architecture recorded in the CI TLS manifest;
 it does not qualify the whole Seaweed control plane or the full integration stack.
-
-## RustSec shipped-code gate
-
-Alongside the unchanged image gate, native CI now blocks all RustSec
-vulnerabilities and advisory warnings in the exact release build's shipped crate
-set, including advisories without CVE aliases. Build-only and unselected crates
-are retained separately and non-blocking. No upstream ignores are imported.
-See [the inventory method, known quick-xml exposure and evidence](docs/RUSTSEC.md).
