@@ -59,7 +59,7 @@ The planned image contract requires:
   supplied at runtime and never baked into the image;
 - structured JSON logs written to the container log streams;
 - native AMD64 and ARM64 runtime testing;
-- vulnerability scanning with Trivy and Grype;
+- vulnerability scanning with Trivy, Grype and a blocking RustSec shipped-code gate;
 - SPDX software bills of materials generated with Syft;
 - tailored OpenSCAP evidence with documented rule selection and exclusions;
 - BuildKit provenance and SBOM attestations; and
@@ -169,6 +169,9 @@ The locked binaries require at most glibc `2.34` and link only `libc`, `libm`,
 `libresolv`, `libgcc_s`, and the dynamic loader, which is why they run on UBI 9
 without rebuilding. CI re-measures this on every image build rather than
 assuming it holds for a future upstream release.
+
+See [RustSec exposure and the 0.13.9 upgrade](docs/RUSTSEC.md) for the known
+quick-xml blocker and the distinction between shipped and build-only crates.
 
 ## Project documentation
 

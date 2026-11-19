@@ -213,3 +213,12 @@ bill of materials derived from the artifact.
 Upstream publishes no signature and no artifact attestation for the Lakekeeper
 release; both were checked, and neither exists. The recorded digest remains the
 only integrity evidence for the binary. Tracked in [the roadmap](ROADMAP.md).
+
+## Blocking RustSec check
+
+Each existing native image job runs `scripts/rustsec_gate.py` alongside the
+unchanged Trivy/Grype gate. Official cargo-audit release binaries are SHA-256
+pinned, not compiled. Every shipped-code advisory and warning blocks, without
+ignores. Full-lock build-only/unselected findings remain separate and report-only.
+Historical 0.13.4 findings are retained separately from the 0.13.9 gate.
+See [inventory reconstruction and qualification limits](RUSTSEC.md).

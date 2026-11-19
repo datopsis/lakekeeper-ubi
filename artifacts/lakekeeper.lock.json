@@ -341,5 +341,18 @@
         }
       ]
     }
+  },
+  "rustsec": {
+    "sourceArchiveUrl": "https://api.github.com/repos/lakekeeper/lakekeeper/tarball/a8e013b30e99e5a184486fe166c3ffb3781a7c36",
+    "sourceArchiveSha256": "bcda41957e005b07c9d10b261427a78fe1fa3faae8e5df4e412c05de5cadda6b",
+    "toolchain": "nightly-2026-04-12",
+    "buildArguments": [
+      "build",
+      "--all-features",
+      "--release",
+      "--locked"
+    ],
+    "rustflags": "--cfg tracing_unstable -D warnings",
+    "note": "Exact upstream release workflow; unit-graph resolution does not compile or execute build scripts. No upstream advisory ignores are used."
   }
 }
