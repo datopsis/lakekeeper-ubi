@@ -187,3 +187,11 @@ Release evidence binds the image digest to the lock digest, the upstream
 release tag, the archive and binary digests, the base-image digests, and the
 architecture. That record, not a build log, is the durable artifact-provenance
 statement.
+
+## Compiled dependency selection and RustSec
+
+The full declared lock inventory remains report-only. Native CI additionally
+reconstructs the exact upstream release build unit graph and blocks RustSec
+findings in its shipped crate subset, with build-only/unselected crates reported
+separately. This improves selection without claiming artifact-derived provenance.
+See [RustSec method and evidence](RUSTSEC.md).
