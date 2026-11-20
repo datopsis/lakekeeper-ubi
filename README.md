@@ -17,7 +17,7 @@ inspectable security evidence.
 
 - Repository and image: `lakekeeper-ubi`
 - Planned image location: `ghcr.io/datopsis/lakekeeper-ubi`
-- Initial Lakekeeper version: `0.13.4`
+- Current Lakekeeper version: `0.13.9`
 - Initial UBI major line: `9`
 - Tested catalog database: PostgreSQL 18 from
   [datopsis/postgresql-lakekeeper-ubi](https://github.com/datopsis/postgresql-lakekeeper-ubi)

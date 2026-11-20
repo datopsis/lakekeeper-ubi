@@ -1,24 +1,24 @@
 {
   "lockSchemaVersion": "1.0.0",
   "component": "lakekeeper",
-  "upstreamVersion": "0.13.4",
+  "upstreamVersion": "0.13.9",
   "upstreamProject": "https://github.com/lakekeeper/lakekeeper",
-  "upstreamReleaseTag": "v0.13.4",
-  "upstreamReleaseCommit": "9bd377162345b64a716f0a4fcffe4e7e7f3c7534",
-  "upstreamReleasePublished": "2026-09-10T21:27:18Z",
+  "upstreamReleaseTag": "v0.13.9",
+  "upstreamReleaseCommit": "a8e013b30e99e5a184486fe166c3ffb3781a7c36",
+  "upstreamReleasePublished": "2026-11-14T12:14:35Z",
   "upstreamLicense": "Apache-2.0",
   "artifactSource": "github-releases-official",
   "publisherVerification": {
     "signature": "none-published",
     "checksumFile": "none-published",
-    "recordedDigestSource": "GitHub release asset metadata retrieved 2026-09-10",
+    "recordedDigestSource": "GitHub release asset metadata retrieved 2026-11-19; archive and extracted ELF bytes independently hashed",
     "note": "Upstream publishes neither a detached signature nor a checksum file. The digests below are this project's reviewed record of the exact bytes admitted to a build. See docs/ARTIFACT-ACQUISITION.md for the resulting trust limitation and the required lock-update review."
   },
   "crateInventory": {
-    "url": "https://raw.githubusercontent.com/lakekeeper/lakekeeper/9bd377162345b64a716f0a4fcffe4e7e7f3c7534/Cargo.lock",
-    "sha256": "b3c0994886c65cc7eb38c0dbdc35ec4c330d13186bbc0bd05b148e77ac6a0f56",
-    "sizeBytes": 206154,
-    "declaredPackages": 771,
+    "url": "https://raw.githubusercontent.com/lakekeeper/lakekeeper/a8e013b30e99e5a184486fe166c3ffb3781a7c36/Cargo.lock",
+    "sha256": "d9a21bfed4882a012a12764c4894a64bff5dacbfa8bbbfea500edea432909c0e",
+    "sizeBytes": 199140,
+    "declaredPackages": 745,
     "note": "Pinned to the release commit, not the tag, because a tag can move. This is the DECLARED dependency graph of the source at that commit. It is not proof of what the published binary contains: feature flags, optional dependencies, and build configuration all change which of these crates are actually compiled in. It is a far better basis for triage than the nothing the binary itself carries, and it must never be described as a bill of materials derived from the shipped artifact."
   },
   "baseImages": {
@@ -37,15 +37,15 @@
       "rustTarget": "x86_64-unknown-linux-gnu",
       "archive": {
         "name": "lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
-        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.4/lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
-        "sizeBytes": 62023668,
-        "sha256": "1ee4c9f5e3409d91d61258d8d378a94a9ea9b16db2ba08c0ed0ed85b1dc3dd10"
+        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.9/lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
+        "sizeBytes": 62208978,
+        "sha256": "a96d4ae3f9bf029ef7e14868b064ce8138bb2c16c726c1306ea8fd9932de91aa"
       },
       "binary": {
         "path": "lakekeeper",
-        "sizeBytes": 167198344,
-        "sha256": "52cdaa0be3724158ce7943f211fcff09a1ae451b5e88916a42b367bdaf1fd705",
-        "buildId": "4c72bb7e7f012512cfd941230b95806aa80de319"
+        "sizeBytes": 167793128,
+        "sha256": "44ffec9b35dbf8b750208c9c14fd3a5fa6ec62690042dafa9391df114ca435a3",
+        "buildId": "633fc1e9687f436d0a20d5075516268f91f9ef00"
       },
       "runtimeRequirements": {
         "interpreter": "/lib64/ld-linux-x86-64.so.2",
@@ -191,15 +191,15 @@
       "rustTarget": "aarch64-unknown-linux-gnu",
       "archive": {
         "name": "lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
-        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.4/lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
-        "sizeBytes": 64240181,
-        "sha256": "14d52e4141b0494e79400e38a773b4682a0e3a98b7f3148943a6c09ca869abe0"
+        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.9/lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
+        "sizeBytes": 64235633,
+        "sha256": "de3c32fd6dae356e947c2a83a53a85252ae46c58f8a57aab4e3315c3111d002c"
       },
       "binary": {
         "path": "lakekeeper",
-        "sizeBytes": 157974800,
-        "sha256": "fea96fa11ecfff75a82892e70387f4abba02ab4a1ade5f3a40bc1afa63f20889",
-        "buildId": "ffbb2eb99471ac317646e82909def08719e20260"
+        "sizeBytes": 158018552,
+        "sha256": "310dc6eda5895666f9f0548390ac30832aeff1d7984350e52b9cc7d723a15fa3",
+        "buildId": "0a416a8cd01d697b508fda4da60a73f6aa2223bb"
       },
       "runtimeRequirements": {
         "interpreter": "/lib/ld-linux-aarch64.so.1",

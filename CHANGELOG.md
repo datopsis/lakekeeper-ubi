@@ -10,6 +10,9 @@ but container releases use the upstream-derived format documented in
 
 ### Fixed
 
+- Updated the locked Lakekeeper release to 0.13.9 on both architectures,
+  preserving exact-byte acquisition, runtime hardening and all existing gates.
+
 - Gate fixable HIGH/CRITICAL RPM findings on fresh, native UBI repository
   availability using RPM epoch/version/release comparison. Unpublished vendor
   fixes are reported as deferred; available fixes, query failures and fixable
