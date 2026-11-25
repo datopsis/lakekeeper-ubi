@@ -8,6 +8,12 @@ but container releases use the upstream-derived format documented in
 
 ## [Unreleased]
 
+### Documentation
+
+- Added an owner-review proposal for default-on optional upstream Azure/GCS
+  storage features, with pinned source research, related upstream discussions,
+  compatibility/tests/CI considerations and an unposted issue draft.
+
 ### Fixed
 
 - Updated the locked Lakekeeper release to 0.13.9 on both architectures,
