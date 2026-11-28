@@ -10,8 +10,20 @@ but container releases use the upstream-derived format documented in
 
 ### Fixed
 
+- Apply the 2026-11-27 RustSec policy: fixable shipped advisories block regardless
+  of type; no-patch advisories are reported and tracked in one scheduled issue
+  without ignores. Flag new patches and remediation/replacement guidance only
+  when the tracked set/state changes. Build-only/unselected findings stay
+  report-only; existing native image gates and hardening are unchanged.
+
 - Updated the locked Lakekeeper release to 0.13.9 on both architectures,
   preserving exact-byte acquisition, runtime hardening and all existing gates.
+- Added a report-only 0.15.1 evaluation with pinned candidate audit inputs;
+  the shipped version remains 0.13.9.
+- Added a checksum-pinned prebuilt cargo-audit gate for the release build's
+  shipped crate graph. Fixable RustSec findings without CVE aliases block; build-only
+  and unselected findings are separately retained. Known quick-xml 0.40.1
+  exposure remains a blocker, without ignores or downstream patches.
 
 - Gate fixable HIGH/CRITICAL RPM findings on fresh, native UBI repository
   availability using RPM epoch/version/release comparison. Unpublished vendor

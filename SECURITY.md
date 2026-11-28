@@ -132,3 +132,15 @@ container. S3 and actual STS AssumeRole must use verified HTTPS with the custom
 root loaded before process startup. Qualification evidence is scoped to the
 exact client paths and native architecture recorded in the CI TLS manifest;
 it does not qualify the whole Seaweed control plane or the full integration stack.
+
+## RustSec shipped-code gate
+
+Alongside the unchanged image gate, native CI blocks any RustSec advisory for a
+shipped crate if its `versions.patched` list is non-empty, whatever its type or
+CVE alias. Advisories without patched versions are listed in job summaries and
+one scheduled RustSec tracking issue; new patches or remediation/replacement
+guidance are flagged. Build-only/unselected crates remain separately reported
+and non-blocking. Missing metadata/evidence fails closed. No upstream ignores
+or per-ID/package exemptions are imported. This implements the owner-approved
+organization policy dated 2026-11-27.
+See [the inventory method, known quick-xml exposure and evidence](docs/RUSTSEC.md).

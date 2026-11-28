@@ -246,47 +246,8 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
         run: bash tests/runtime-dependencies.sh
 
-      # No published PostgreSQL fixture exists. Its single reviewed source pin
-      # is shared with local builds; verify source, image labels and native arch.
-      - name: Build pinned PostgreSQL fixture
-        env:
-          CONTAINER_RUNTIME: docker
-        run: bash scripts/build-postgres.sh
-
-      - name: Run restricted-runtime smoke tests
-        env:
-          CONTAINER_RUNTIME: docker
-          IMAGE: ${{ env.TEST_IMAGE }}
-        run: bash tests/smoke.sh
-
-      # Proves the image is a working catalog, not merely a server that
-      # answers. Also the only test that exercises the secret encryption key
-      # against a credential that exists.
-      - name: Qualify S3-compatible warehouse storage
-        env:
-          CONTAINER_RUNTIME: docker
-          IMAGE: ${{ env.TEST_IMAGE }}
-        run: bash tests/storage.sh
-
-      - name: Build pinned TLS proxy using its repository build contract
-        run: bash scripts/build-tls-proxy.sh
-
-      - name: Qualify Phase A TLS with the shipped Lakekeeper
-        env:
-          IMAGE: ${{ env.TEST_IMAGE }}
-        run: |
-          python3 tests/tls_policy.py
-          python3 tests/tls_profile.py
-
-      - name: Retain sanitized TLS assertion manifest
-        if: ${{ always() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: tls-${{ github.sha }}-${{ matrix.architecture }}
-          path: tls-report.json
-          if-no-files-found: error
-          retention-days: 14
-
+      # Collect image evidence before external runtime fixtures: a fixture
+      # acquisition outage must not hide the image's vulnerability reports.
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -333,11 +294,74 @@ jobs:
           cache-db: true
           grype-version: v0.118.0
 
+      # No published PostgreSQL fixture exists. Its single reviewed source pin
+      # is shared with local builds; verify source, image labels and native arch.
+      - name: Build pinned PostgreSQL fixture
+        env:
+          CONTAINER_RUNTIME: docker
+        run: bash scripts/build-postgres.sh
+
+      - name: Run restricted-runtime smoke tests
+        env:
+          CONTAINER_RUNTIME: docker
+          IMAGE: ${{ env.TEST_IMAGE }}
+        run: bash tests/smoke.sh
+
+      # Proves the image is a working catalog, not merely a server that
+      # answers. Also the only test that exercises the secret encryption key
+      # against a credential that exists.
+      - name: Qualify S3-compatible warehouse storage
+        env:
+          CONTAINER_RUNTIME: docker
+          IMAGE: ${{ env.TEST_IMAGE }}
+        run: bash tests/storage.sh
+
+      - name: Build pinned TLS proxy using its repository build contract
+        run: bash scripts/build-tls-proxy.sh
+
+      - name: Qualify Phase A TLS with the shipped Lakekeeper
+        env:
+          IMAGE: ${{ env.TEST_IMAGE }}
+        run: |
+          python3 tests/tls_policy.py
+          python3 tests/tls_profile.py
+
+      - name: Retain sanitized TLS assertion manifest
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tls-${{ github.sha }}-${{ matrix.architecture }}
+          path: tls-report.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Gate fixes against the native UBI repositories
         if: ${{ always() }}
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
         run: bash scripts/run-vulnerability-gate.sh "${ARCHITECTURE}"
+
+      - name: Record historical 0.13.4 RustSec exposure
+        if: ${{ always() && hashFiles(format('.artifact-bundle/{0}/lakekeeper', matrix.architecture)) != '' }}
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: python3 scripts/rustsec_gate.py "${ARCHITECTURE}" --historical-baseline
+
+      # Independent of RPM installable-fix policy. Run after the existing
+      # scanners/gate even when they fail, and retain both crate classifications.
+      - name: Block RustSec advisories in shipped Rust code
+        if: ${{ always() && hashFiles(format('.artifact-bundle/{0}/lakekeeper', matrix.architecture)) != '' }}
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: python3 scripts/rustsec_gate.py "${ARCHITECTURE}"
+
+      # Candidate evaluation downloads/audits 0.15.1 only. The image still
+      # ships the ordinary artifact lock; its blocking gate above is independent.
+      - name: Evaluate unshipped Lakekeeper 0.15.1 RustSec findings
+        if: ${{ always() && hashFiles(format('.artifact-bundle/{0}/lakekeeper', matrix.architecture)) != '' }}
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: python3 scripts/rustsec_gate.py "${ARCHITECTURE}" --evaluate-0151
 
       - name: Retain image security artifacts
         if: ${{ always() }}
@@ -404,3 +428,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/track_deferred_fixes.py /tmp/ubi-gate-reports
+
+      - name: Track no-patch shipped RustSec advisories in one issue
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/track_unpatched_rustsec.py /tmp/ubi-gate-reports

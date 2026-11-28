@@ -1,0 +1,56 @@
+{
+  "upstreamVersion": "0.13.4",
+  "upstreamReleaseCommit": "9bd377162345b64a716f0a4fcffe4e7e7f3c7534",
+  "crateInventory": {
+    "url": "https://raw.githubusercontent.com/lakekeeper/lakekeeper/9bd377162345b64a716f0a4fcffe4e7e7f3c7534/Cargo.lock",
+    "sha256": "b3c0994886c65cc7eb38c0dbdc35ec4c330d13186bbc0bd05b148e77ac6a0f56",
+    "sizeBytes": 206154,
+    "declaredPackages": 771,
+    "note": "Pinned to the release commit, not the tag, because a tag can move. This is the DECLARED dependency graph of the source at that commit. It is not proof of what the published binary contains: feature flags, optional dependencies, and build configuration all change which of these crates are actually compiled in. It is a far better basis for triage than the nothing the binary itself carries, and it must never be described as a bill of materials derived from the shipped artifact."
+  },
+  "architectures": {
+    "amd64": {
+      "rustTarget": "x86_64-unknown-linux-gnu",
+      "archive": {
+        "name": "lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
+        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.4/lakekeeper-x86_64-unknown-linux-gnu.tar.gz",
+        "sizeBytes": 62023668,
+        "sha256": "1ee4c9f5e3409d91d61258d8d378a94a9ea9b16db2ba08c0ed0ed85b1dc3dd10"
+      },
+      "binary": {
+        "path": "lakekeeper",
+        "sizeBytes": 167198344,
+        "sha256": "52cdaa0be3724158ce7943f211fcff09a1ae451b5e88916a42b367bdaf1fd705",
+        "buildId": "4c72bb7e7f012512cfd941230b95806aa80de319"
+      }
+    },
+    "arm64": {
+      "rustTarget": "aarch64-unknown-linux-gnu",
+      "archive": {
+        "name": "lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
+        "url": "https://github.com/lakekeeper/lakekeeper/releases/download/v0.13.4/lakekeeper-aarch64-unknown-linux-gnu.tar.gz",
+        "sizeBytes": 64240181,
+        "sha256": "14d52e4141b0494e79400e38a773b4682a0e3a98b7f3148943a6c09ca869abe0"
+      },
+      "binary": {
+        "path": "lakekeeper",
+        "sizeBytes": 157974800,
+        "sha256": "fea96fa11ecfff75a82892e70387f4abba02ab4a1ade5f3a40bc1afa63f20889",
+        "buildId": "ffbb2eb99471ac317646e82909def08719e20260"
+      }
+    }
+  },
+  "rustsec": {
+    "sourceArchiveUrl": "https://api.github.com/repos/lakekeeper/lakekeeper/tarball/9bd377162345b64a716f0a4fcffe4e7e7f3c7534",
+    "sourceArchiveSha256": "67cbe4c97e18735af3f45ffca5f7a63e16971a1855122d0da593fb35413a55ac",
+    "toolchain": "nightly-2026-04-12",
+    "buildArguments": [
+      "build",
+      "--all-features",
+      "--release",
+      "--locked"
+    ],
+    "rustflags": "--cfg tracing_unstable -D warnings",
+    "note": "Exact upstream release workflow; unit-graph resolution does not compile or execute build scripts. No upstream advisory ignores are used."
+  }
+}
