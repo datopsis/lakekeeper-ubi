@@ -2,9 +2,11 @@
 
 The shipped release is 0.13.9, not 0.15.x. No Lakekeeper source is patched.
 Trivy, Grype, the UBI installable-fix policy, required job names and runtime
-hardening remain unchanged. A separate RustSec gate blocks every vulnerability
-and advisory warning in the reconstructed shipped crate inventory, including
-advisories without CVE aliases. There are no advisory ignores or exemptions.
+hardening remain unchanged. Under the owner decision dated 2026-11-27, a separate
+RustSec gate blocks any advisory for a shipped crate when `versions.patched` is
+non-empty, including informational/unsound advisories and advisories without CVE
+aliases. Shipped advisories with no patched version are reported and tracked,
+not blocking. There are no advisory ignores or exemptions.
 
 ## Inventory and trust boundary
 
@@ -36,9 +38,12 @@ reports and tool failures block; none can be treated as a clean result.
 archives for both native architectures by SHA-256 from GitHub asset metadata.
 The tool is not compiled. It runs outside upstream's source directory so the
 upstream ignore configuration is not applied. A fresh RustSec DB is cloned per
-scan, and both inventories use the same recorded DB commit. All severities and
-warnings are blocking for shipped code, regardless of CVE alias or fix status.
-Yanked crates are checked too. Full JSON, stderr, unit graph, metadata, both
+scan, and both inventories use the same recorded DB commit. Admission depends on
+compiled scope and the advisory's `versions.patched` list, never severity,
+`informational` type, an ID list, or an exploitability judgment. A non-empty list
+blocks shipped code; an empty list is report/track only. Missing or malformed
+patch metadata fails closed. Yanked crates retain their independent existing
+check (the current binary has none). Full JSON, stderr, unit graph, metadata, both
 inventory locks, ELF sections and provenance are retained under
 `security-results/rustsec/` in each native image-security artifact.
 
@@ -145,3 +150,42 @@ candidate, not a version upgrade. The explicit `--evaluate-0151` mode uses a
 separate pinned manifest and report directory. Its findings are report-only;
 errors still fail the step. The default shipped 0.13.9 gate is unchanged and
 remains blocking with no ignores. Candidate evidence cannot admit image bytes.
+
+
+## Scheduled tracking of advisories without patches
+
+The existing scheduled notification job (same job name and permissions) also
+runs `scripts/track_unpatched_rustsec.py`. It maintains **one RustSec issue**,
+identified by a stable marker, across both architectures; the UBI tracking issue
+is unchanged. Issue creation/updates can run only on scheduled main-branch CI,
+never PRs, pushes or manual dispatch. No issue is created by the PR's tests.
+The first live issue requires this change to be merged and a scheduled main run.
+
+Each native RustSec artifact now retains `policy.json` and a digest-bound
+`advisory-catalog.json` from the same fresh DB as the raw audit. The tracker
+requires exactly one complete admission report per architecture, verifies hashes
+and provenance, and recomputes policy from raw findings. Missing, duplicate,
+incomplete, malformed or inconsistent evidence cannot clear tracked findings.
+Native jobs can fail on fixable advisories while still supplying valid no-patch
+tracking evidence. All no-patch shipped findings appear in the job summary.
+
+The issue retains identities once observed without patches. It comments only
+when their set or relevant state changes: new/removal from shipped code, a new
+patched range, withdrawal, or changed RustSec remediation/replacement guidance.
+An unchanged set causes no comment for a new run, timestamp, DB revision or
+unrelated advisory. A patch appearing is explicitly flagged **FIX NOW AVAILABLE**
+and blocks whenever that affected crate is still shipped. State is retained
+even after a finding disappears, so a new fix is not mistaken for disappearance.
+A previously posted notification is recognized on retry if its body update failed.
+
+RustSec does not provide a structured replacement field. Its advisory text and
+references describe alternatives (for example chrono recommends jiff/time).
+Changes there are flagged **REMEDIATION/REPLACEMENT GUIDANCE CHANGED** for review;
+this is not an automatic claim of equivalent replacements or approval to switch
+crates. The tracker does not crawl linked sites or discover alternatives that
+have not been recorded in RustSec. No per-crate replacement map is maintained.
+
+[Policy measurement](evals/2026-11-27-rustsec-policy.md) classifies the retained
+24 findings: **21 blocking, 3 report/track**, plus 9 build-only/unselected reports
+on each architecture. This is a policy reclassification, not remediation. New CI
+uses a fresh DB and retains any additional findings rather than freezing counts.

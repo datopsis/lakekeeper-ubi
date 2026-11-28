@@ -15,6 +15,9 @@ import tomllib
 import urllib.request
 import urllib.parse
 
+from rustsec_policy import POLICY_VERSION, advisory_catalog, all_findings, classify
+from ubi_vulnerability_gate import cell
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -118,9 +121,7 @@ def audit(tool, inventory, database, output):
     report = json.loads(result.stdout)  # An error/empty report is never clean.
     if result.returncode not in (0, 1) or "vulnerabilities" not in report:
         raise ValueError(f"cargo-audit failed: {result.stderr}")
-    findings = list(report["vulnerabilities"]["list"])
-    for values in report["warnings"].values():
-        findings.extend(values)
+    findings = all_findings(report)
     if bool(findings) != (result.returncode == 1):
         raise ValueError("cargo-audit exit status disagrees with its report")
     return findings
@@ -153,6 +154,7 @@ def main():
     target = entry["rustTarget"]
     output = ROOT / "security-results" / output_name
     output.mkdir(parents=True, exist_ok=True)
+    (output / "policy.json").unlink(missing_ok=True)  # Never reuse a prior complete decision on failure.
     binary = ROOT / ".artifact-bundle" / args.architecture / "lakekeeper"
     if report_only:
         # Historical/evaluation evidence never admits the shipped release.
@@ -228,18 +230,45 @@ def main():
         # Evaluate both reports before returning failure for shipped code.
         excluded = audit(tool, output / "build-only-or-unselected.Cargo.lock", database,
                          output / "build-only-or-unselected.json")
-        blocking = audit(tool, output / "shipped.Cargo.lock", database, output / "shipped.json")
+        runtime_findings = audit(tool, output / "shipped.Cargo.lock", database, output / "shipped.json")
+        runtime = [classify(f, report_only=report_only) for f in runtime_findings]
+        other_findings = [classify(f, "build-only-or-unselected") for f in excluded]
+        catalog = advisory_catalog(database)
+        for row in runtime:
+            if row["advisory"]:
+                entry = catalog[row["advisory"]]
+                # cargo-audit can canonicalize selectors (e.g. implicit ^).
+                # The admission rule depends on patch availability, not spelling.
+                if entry["package"] != row["package"] or bool(entry["patched"]) != bool(row["patched"]):
+                    raise ValueError("Audit report and advisory snapshot disagree")
+        catalog_file = output / "advisory-catalog.json"
+        catalog_file.write_text(json.dumps(catalog, sort_keys=True) + "\n")
+        blocking = [row for row in runtime if row["decision"] == "block"]
+        unpatched = [row for row in runtime if row["advisory"] and not row["patched"]]
+        policy = dict(schema_version=1, policy_version=POLICY_VERSION, complete=True,
+                      architecture=args.architecture, admissionBlocking=not report_only,
+                      advisoryDatabaseCommit=database_sha,
+                      advisoryCatalogSha256=hashlib.sha256(catalog_file.read_bytes()).hexdigest(),
+                      shippedReportSha256=hashlib.sha256((output / "shipped.json").read_bytes()).hexdigest(),
+                      runtime=runtime, buildOnlyOrUnselected=other_findings,
+                      blocked=bool(blocking))
+        (output / "policy.json").write_text(json.dumps(policy, indent=2) + "\n")
         lines = ["## RustSec " + title, "",
-                 f"Subject runtime: {len(shipped)} packages, **{len(blocking)} findings** "
-                 + ("(report-only; subject is not admitted by this scan)." if report_only
-                    else "(blocking for the shipped binary)."),
+                 f"Subject runtime: {len(shipped)} packages, **{len(runtime)} findings**; "
+                 f"**{len(blocking)} blocking**, {len(unpatched)} advisories without patches (report/track).",
+                 "Unshipped subject: all findings report-only." if report_only else
+                 "Shipped advisories block exactly when versions.patched is non-empty, regardless of type or severity.",
                  f"Build-only or unselected: {len(other)} packages, {len(excluded)} report-only findings.",
-                 f"Database: `{database_sha}`. No ignore lists; all advisory severities and warnings block shipped code.", ""]
-        for label, findings in ((("REPORT" if report_only else "BLOCK"), blocking), ("REPORT", excluded)):
+                 f"Database: `{database_sha}`. No ignore or exemption lists. Policy: {POLICY_VERSION}.",
+                 "Yanked crates retain their independent existing admission check.", ""]
+        for findings in (runtime, other_findings):
             for finding in findings:
-                package, advisory = finding["package"], finding.get("advisory")
-                lines.append(f"- {label}: {package['name']} {package['version']} "
-                             f"{advisory['id'] if advisory else 'yanked'}")
+                label = finding["decision"].upper()
+                if finding["advisory"] and not finding["patched"] and finding["scope"] == "shipped":
+                    label = "REPORT/TRACK"
+                lines.append(f"- {label}: {cell(finding['package'])} {cell(finding['version'])} "
+                             f"{cell(finding['advisory'] or 'yanked')} ({cell(finding['type'])}); "
+                             f"patched: {cell(', '.join(finding['patched']) or 'none')}; {cell(finding['reason'])}")
         summary = "\n".join(lines) + "\n"
         print(summary)
         (output / "summary.md").write_text(summary)

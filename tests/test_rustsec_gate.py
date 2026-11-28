@@ -6,6 +6,8 @@ import unittest
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
 SPEC = importlib.util.spec_from_file_location(
     "rustsec_gate", Path(__file__).resolve().parents[1] / "scripts/rustsec_gate.py"
 )

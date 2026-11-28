@@ -428,3 +428,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/track_deferred_fixes.py /tmp/ubi-gate-reports
+
+      - name: Track no-patch shipped RustSec advisories in one issue
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/track_unpatched_rustsec.py /tmp/ubi-gate-reports
