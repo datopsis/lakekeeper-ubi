@@ -255,7 +255,8 @@ def main():
         (output / "policy.json").write_text(json.dumps(policy, indent=2) + "\n")
         lines = ["## RustSec " + title, "",
                  f"Subject runtime: {len(shipped)} packages, **{len(runtime)} findings**; "
-                 f"**{len(blocking)} blocking**, {len(unpatched)} advisories without patches (report/track).",
+                 f"**{len(blocking)} blocking**, {len(unpatched)} advisories without patches "
+                 + ("(report-only)." if report_only else "(report/track)."),
                  "Unshipped subject: all findings report-only." if report_only else
                  "Shipped advisories block exactly when versions.patched is non-empty, regardless of type or severity.",
                  f"Build-only or unselected: {len(other)} packages, {len(excluded)} report-only findings.",
@@ -264,7 +265,7 @@ def main():
         for findings in (runtime, other_findings):
             for finding in findings:
                 label = finding["decision"].upper()
-                if finding["advisory"] and not finding["patched"] and finding["scope"] == "shipped":
+                if not report_only and finding["advisory"] and not finding["patched"] and finding["scope"] == "shipped":
                     label = "REPORT/TRACK"
                 lines.append(f"- {label}: {cell(finding['package'])} {cell(finding['version'])} "
                              f"{cell(finding['advisory'] or 'yanked')} ({cell(finding['type'])}); "

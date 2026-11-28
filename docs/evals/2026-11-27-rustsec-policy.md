@@ -64,3 +64,35 @@ API; real creation and notification await merge plus scheduled main CI. The
 existing scheduled job/permissions are reused, with no settings changes. Image
 builds, scans and native runtime suites run only in GitHub Actions; their fresh
 results and artifacts are recorded in PR #28 after review.
+
+## Fresh native verification (2026-11-28)
+
+[Run 46086362264](https://github.com/datopsis/lakekeeper-ubi/actions/runs/46086362264),
+head `c36363a885a597d9040cf15b73676527944a4bbe`, regenerates the raw audits and
+policy decisions against RustSec DB `c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd`.
+[amd64](https://github.com/datopsis/lakekeeper-ubi/actions/runs/46086362264/artifacts/15240165492)
+and [arm64](https://github.com/datopsis/lakekeeper-ubi/actions/runs/46086362264/artifacts/15239657922)
+retain `security-results/rustsec/{policy.json,shipped.json,advisory-catalog.json}`
+and all previous provenance/inventory evidence.
+
+| Architecture | Original 24: blocking / report-only | Fresh total | Fresh blocking | Fresh report/track | Build-only reports |
+| --- | --- | --- | --- | --- | --- |
+| amd64 | 21 / 3 | 27 | 24 | 3 | 9 |
+| arm64 | 21 / 3 | 27 | 24 | 3 | 9 |
+
+The additional three findings are **new fixable advisories**, not a change to
+classification of the original 24:
+
+- kube-client 4.0.0: RUSTSEC-2026-0600
+- url 2.5.8: RUSTSEC-2026-0592
+- parquet 58.3.0: RUSTSEC-2026-0595 (`unsound`, still blocks because patched)
+
+Both native jobs fail only at the intended RustSec gate; existing native image,
+scanner, UBI gate, smoke, storage and TLS checks pass. No Python traceback or
+infrastructure exception was substituted for advisory detection. The tracker
+validated both real native inputs and generated a six-row initial issue preview
+(three no-patch advisories across two architectures), including chrono's
+replacement guidance. Re-rendering an unchanged set retained its fingerprint.
+This preview was local, read-only evidence validation; no issue API write or
+local vulnerability scan ran. Scheduled issue creation remains unverified until
+merge and scheduled main CI, as required by the write restriction.
